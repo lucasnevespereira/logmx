@@ -2,7 +2,7 @@
 
 ## Overview
 
-logmx is built around the concept of **connectors** — one per cloud provider — that each stream logs into a shared aggregator, which merges them and outputs to the terminal.
+logmx is built around **connectors** — one per cloud provider — that each stream logs into a shared aggregator, which merges them and outputs to the terminal.
 
 ```
 +-------------------+
@@ -31,17 +31,15 @@ logmx is built around the concept of **connectors** — one per cloud provider �
 
 Parses commands, starts the aggregator, renders logs to the terminal.
 
-Library: [`clap`](https://github.com/clap-rs/clap)
+Library: [`cobra`](https://github.com/spf13/cobra)
 
 ### Aggregator
 
-Starts connectors concurrently, merges their async streams, and forwards log entries to output.
-
-Libraries: [`tokio`](https://tokio.rs), [`futures`](https://docs.rs/futures)
+Starts connectors concurrently via goroutines, merges their output into a single `chan LogEntry`, and forwards entries to the printer.
 
 ### Connectors
 
-Each connector authenticates to a provider, fetches logs, and streams them as `LogEntry` values.
+Each connector implements the `Connector` interface, authenticates to a provider, and streams `LogEntry` values into the shared channel.
 
 Planned connectors: Vercel, Railway, GCP, Render, Heroku, Docker, Kubernetes.
 
@@ -49,40 +47,57 @@ Planned connectors: Vercel, Railway, GCP, Render, Heroku, Docker, Kubernetes.
 
 All connectors normalize logs into a single structure:
 
-```rust
-struct LogEntry {
-    timestamp: DateTime<Utc>,
-    source: String,
-    level: LogLevel,
-    message: String,
+```go
+type LogEntry struct {
+    Timestamp time.Time
+    Source    string
+    Level    LogLevel
+    Message  string
 }
 ```
 
-Example JSON representation:
+## Configuration
 
-```json
-{
-  "timestamp": "2026-03-16T18:10:00Z",
-  "source": "vercel",
-  "level": "error",
-  "message": "timeout while fetching API"
-}
+Sources are defined in `~/.config/logmx/config.yaml`:
+
+```yaml
+sources:
+  - name: api
+    provider: vercel
+    project: prj_abc123
+  - name: worker
+    provider: railway
+    service: srv_xxx
 ```
 
 ## Project Structure
 
 ```
-logmx
-├── Cargo.toml
-└── src
-    ├── main.rs
-    ├── cli.rs
-    ├── aggregator.rs
-    ├── models.rs
-    ├── connectors
-    │   ├── mod.rs
-    │   ├── vercel.rs
-    │   ├── railway.rs
-    │   └── gcp.rs
-    └── utils.rs
+logmx/
+├── go.mod
+├── cmd/
+│   └── logmx/
+│       ├── main.go              ← entry point
+│       └── commands/
+│           ├── root.go          ← cobra root command
+│           ├── tail.go          ← tail command
+│           ├── sources.go       ← sources command
+│           └── init.go          ← init command
+└── internal/
+    ├── models/
+    │   └── log.go               ← LogEntry, LogLevel
+    ├── config/
+    │   └── config.go            ← YAML config loading
+    ├── aggregator/
+    │   └── aggregator.go        ← merges connector channels
+    └── connectors/
+        ├── connector.go         ← Connector interface
+        ├── demo/
+        │   └── demo.go
+        ├── vercel/
+        │   └── vercel.go
+        ├── railway/
+        │   └── railway.go
+        └── gcp/
+            └── gcp.go
 ```

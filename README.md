@@ -18,7 +18,7 @@ logmx tail --apps vercel,railway,gcp
 ## Install
 
 ```sh
-cargo install logmx
+go install github.com/lucasnevespereira/logmx@latest
 ```
 
 ## Usage

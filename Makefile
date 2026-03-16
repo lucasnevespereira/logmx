@@ -1,4 +1,7 @@
-.PHONY: build
+.PHONY: build run
 
 build:
-	@cargo build
+	@go build -o logmx ./cmd/logmx
+
+run:
+	@go run ./cmd/logmx
