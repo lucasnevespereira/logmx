@@ -24,11 +24,11 @@ go install github.com/lucasnevespereira/logmx/cmd/logmx@latest
 ```sh
 logmx auth vercel
 # → Paste your token (get one at https://vercel.com/account/tokens)
-# → Verifying... authenticated as lucas
+# → Verifying... authenticated as johndoe
 
 logmx auth railway
 # → Paste your token (get one at https://railway.app/account/tokens)
-# → Verifying... authenticated as lucas@example.com
+# → Verifying... authenticated as johndoe@example.com
 ```
 
 Tokens are stored locally in `~/.config/logmx/auth.json` (file permissions: `0600`).
@@ -83,12 +83,12 @@ logmx tail
 
 ## Supported Providers
 
-| Provider | Status | Auth |
-|----------|--------|------|
+| Provider | Status    | Auth                  |
+| -------- | --------- | --------------------- |
 | Vercel   | Supported | Personal access token |
-| Railway  | Supported | API token |
-| GCP      | Planned | — |
-| Render   | Planned | — |
+| Railway  | Supported | API token             |
+| GCP      | Planned   | —                     |
+| Render   | Planned   | —                     |
 
 ## Documentation
 
@@ -101,4 +101,4 @@ Contributions welcome. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for an overvi
 
 ## License
 
-MIT
+[MIT](LICENSE)
