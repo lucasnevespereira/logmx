@@ -1,25 +1,29 @@
 # Roadmap
 
-## v0.1 — MVP
+## v0.0.1 — MVP
 
-- [ ] `logmx tail` CLI command
-- [ ] One working connector (Vercel or Railway)
-- [ ] Async log streaming
-- [ ] Colored terminal output
-- [ ] Basic `LogEntry` model
+- [x] `logmx tail` CLI command
+- [x] Demo connector with async streaming
+- [x] Colored terminal output
+- [x] `LogEntry` model with level, source, timestamp
+- [x] Concurrent streaming from multiple sources
+- [x] Filter by log level (`--level error`)
+- [x] Config file (`~/.config/logmx/config.yaml`)
+- [x] `logmx auth <provider>` — token-based auth (Vercel, Railway)
+- [x] `logmx add` — interactive project picker
+- [x] `logmx sources` / `logmx remove`
+- [x] Vercel connector (polls deployment events, detects new deployments)
+- [x] Railway connector (polls deployment logs via GraphQL)
+- [x] Reconnection with exponential backoff
+- [x] Log ordering by timestamp across sources
 
-## v0.2
+## v0.0.2 — More Providers & Polish
 
-- [ ] Multiple connectors (Vercel, Railway, GCP, Render)
-- [ ] Concurrent streaming from multiple sources
-- [ ] Filter by log level (`--level error`)
-- [ ] Filter by keyword
-
-## v0.3
-
-- [ ] Config file with authentication tokens
-- [ ] Reconnection handling
-- [ ] Log ordering by timestamp across sources
+- [ ] GCP Cloud Logging connector
+- [ ] Render connector
+- [ ] Filter by keyword / regex (`logmx tail --grep "timeout"`)
+- [ ] `logmx search "timeout"` — search recent logs across sources
+- [ ] goreleaser + Homebrew tap
 
 ## Future Ideas
 

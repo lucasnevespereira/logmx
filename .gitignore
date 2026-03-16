@@ -1,6 +1,6 @@
 # Binary
-logmx
 /dist
+bin/
 
 # OS
 .DS_Store
@@ -8,4 +8,3 @@ logmx
 # IDE
 .idea/
 .vscode/
-*.swp
