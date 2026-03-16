@@ -12,6 +12,7 @@ import (
 
 	"github.com/lucasnevespereira/logmx/internal/aggregator"
 	"github.com/lucasnevespereira/logmx/internal/auth"
+	"github.com/lucasnevespereira/logmx/internal/cli"
 	"github.com/lucasnevespereira/logmx/internal/config"
 	"github.com/lucasnevespereira/logmx/internal/connectors"
 	"github.com/lucasnevespereira/logmx/internal/connectors/demo"
@@ -26,23 +27,24 @@ func tailCmd() *cobra.Command {
 		sources string
 		level   string
 		cfgPath string
+		limit   int
 	)
 
 	cmd := &cobra.Command{
 		Use:   "tail",
-		Short: "Stream logs from configured sources",
+		Short: "Show recent logs from configured sources",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cfgPath == "" {
 				cfgPath = config.DefaultPath()
 			}
 
-			conns, err := buildConnectors(cfgPath, sources)
+			conns, err := buildConnectors(cfgPath, sources, limit)
 			if err != nil {
 				return err
 			}
 
 			if len(conns) == 0 {
-				fmt.Println("No sources configured. Run 'logmx init' then edit ~/.config/logmx/config.yaml")
+				fmt.Println("No sources configured. Run 'logmx setup' to get started.")
 				return nil
 			}
 
@@ -68,32 +70,30 @@ func tailCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&sources, "source", "", "Comma-separated source names to tail (default: all)")
+	cmd.Flags().StringVar(&sources, "source", "", "Comma-separated source names (default: all)")
 	cmd.Flags().StringVar(&level, "level", "", "Filter by log level (info, warn, error, debug)")
 	cmd.Flags().StringVar(&cfgPath, "config", "", "Path to config file")
+	cmd.Flags().IntVarP(&limit, "limit", "n", 100, "Number of recent logs per source")
 
 	return cmd
 }
 
-func buildConnectors(cfgPath string, sourceFilter string) ([]connectors.Connector, error) {
+func buildConnectors(cfgPath string, sourceFilter string, limit int) ([]connectors.Connector, error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
-		// If no config exists, fall back to demo connectors
 		if config.IsNotExist(err) {
-			fmt.Println("No config found, using demo sources. Run 'logmx init' to configure.")
+			fmt.Println("No config found, using demo sources. Run 'logmx setup' to configure.")
 			return []connectors.Connector{
 				&demo.DemoConnector{Source: "vercel"},
 				&demo.DemoConnector{Source: "railway"},
-				&demo.DemoConnector{Source: "gcp"},
 			}, nil
 		}
 		return nil, err
 	}
 
-	// Load auth tokens
-	store := auth.NewStore()
-	if err := store.Load(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not load auth tokens: %v\n", err)
+	store, err := auth.Load(auth.DefaultPath())
+	if err != nil {
+		return nil, fmt.Errorf("loading auth: %w", err)
 	}
 
 	allowed := make(map[string]bool)
@@ -103,13 +103,16 @@ func buildConnectors(cfgPath string, sourceFilter string) ([]connectors.Connecto
 		}
 	}
 
+	var providers []string
 	var conns []connectors.Connector
 	for _, src := range cfg.Sources {
 		if len(allowed) > 0 && !allowed[src.Name] {
 			continue
 		}
+		providers = append(providers, src.Provider)
 
-		c, err := connectorForSource(src, store)
+		token := store.Tokens[src.Provider]
+		c, err := connectorForSource(src, token, limit)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping source %q: %v\n", src.Name, err)
 			continue
@@ -117,34 +120,36 @@ func buildConnectors(cfgPath string, sourceFilter string) ([]connectors.Connecto
 		conns = append(conns, c)
 	}
 
+	if missing := cli.MissingDeps(providers); len(missing) > 0 {
+		for _, dep := range missing {
+			fmt.Fprintf(os.Stderr, "missing: %s — install with: %s\n", dep.Name, dep.InstallCmd)
+		}
+		return nil, fmt.Errorf("install missing dependencies and try again")
+	}
+
 	return conns, nil
 }
 
-func connectorForSource(src config.Source, store *auth.Store) (connectors.Connector, error) {
+func connectorForSource(src config.Source, token string, limit int) (connectors.Connector, error) {
 	switch src.Provider {
 	case "demo":
 		return &demo.DemoConnector{Source: src.Name}, nil
 
 	case "vercel":
-		token, err := store.Get("vercel")
-		if err != nil {
-			return nil, err
-		}
 		return &connVercel.Connector{
 			Source:    src.Name,
 			ProjectID: src.Project,
-			Token:    token,
+			Token:     token,
+			Limit:     limit,
 		}, nil
 
 	case "railway":
-		token, err := store.Get("railway")
-		if err != nil {
-			return nil, err
-		}
 		return &connRailway.Connector{
 			Source:    src.Name,
+			ProjectID: src.Project,
 			ServiceID: src.Service,
-			Token:    token,
+			Token:     token,
+			Limit:     limit,
 		}, nil
 
 	default:

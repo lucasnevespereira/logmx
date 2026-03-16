@@ -1,82 +1,89 @@
 package railway
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/lucasnevespereira/logmx/internal/connectors"
 	"github.com/lucasnevespereira/logmx/internal/models"
-	provider "github.com/lucasnevespereira/logmx/internal/provider/railway"
-	"github.com/lucasnevespereira/logmx/internal/retry"
 )
 
 type Connector struct {
 	Source    string
+	ProjectID string
 	ServiceID string
-	Token    string
+	Token     string
+	Limit     int
 }
 
 func (c *Connector) Name() string {
 	return c.Source
 }
 
+type railwayLogLine struct {
+	Message   string `json:"message"`
+	Timestamp string `json:"timestamp"`
+	Severity  string `json:"severity"`
+}
+
 func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error {
-	client := provider.NewClient(c.Token)
-
 	go func() {
-		var deploymentID string
-		seen := make(map[string]bool)
+		args := []string{"logs", "--json"}
+		if c.ServiceID != "" {
+			args = append(args, "-s", c.ServiceID)
+		}
 
-		retry.Backoff(ctx, 30*time.Second, func() error {
-			// Resolve deployment if needed
-			if deploymentID == "" {
-				deployment, err := client.GetActiveDeployment(c.ServiceID)
-				if err != nil {
-					send(ctx, ch, errEntry(c.Source, "failed to get deployment: "+err.Error()))
-					return err
-				}
-				deploymentID = deployment.ID
+		cmd := exec.CommandContext(ctx, "railway", args...)
+		if c.Token != "" {
+			cmd.Env = append(os.Environ(), "RAILWAY_TOKEN="+c.Token)
+		}
+
+		out, err := cmd.Output()
+		if err != nil {
+			connectors.Send(ctx, ch, models.LogEntry{
+				Timestamp: time.Now().UTC(),
+				Source:    c.Source,
+				Level:     models.LevelError,
+				Message:   fmt.Sprintf("railway logs: %v", err),
+			})
+			return
+		}
+
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
 			}
 
-			logs, err := client.QueryLogs(deploymentID, 50)
-			if err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
-				return err
+			var log railwayLogLine
+			if err := json.Unmarshal(line, &log); err != nil {
+				continue
 			}
 
-			for _, l := range logs {
-				key := l.Timestamp + "|" + l.Message
-				if seen[key] {
-					continue
-				}
-				seen[key] = true
-
-				ts, _ := time.Parse(time.RFC3339Nano, l.Timestamp)
-				if ts.IsZero() {
-					ts = time.Now().UTC()
-				}
-
-				send(ctx, ch, models.LogEntry{
-					Timestamp: ts,
-					Source:    c.Source,
-					Level:     parseLevel(l.Severity, l.Message),
-					Message:   l.Message,
-				})
+			if log.Message == "" {
+				continue
 			}
 
-			// Cap the seen set
-			if len(seen) > 5000 {
-				seen = make(map[string]bool)
+			ts, _ := time.Parse(time.RFC3339Nano, log.Timestamp)
+			if ts.IsZero() {
+				ts = time.Now().UTC()
 			}
 
-			time.Sleep(3 * time.Second)
-			return nil // success — resets backoff
-		})
+			connectors.Send(ctx, ch, models.LogEntry{
+				Timestamp: ts,
+				Source:    c.Source,
+				Level:     parseLevel(log.Severity, log.Message),
+				Message:   log.Message,
+			})
+		}
 	}()
-
 	return nil
 }
 
@@ -98,25 +105,7 @@ func parseLevel(severity, text string) models.LogLevel {
 		return models.LevelError
 	case strings.Contains(lower, "warn"):
 		return models.LevelWarn
-	case strings.Contains(lower, "debug"):
-		return models.LevelDebug
 	default:
 		return models.LevelInfo
-	}
-}
-
-func errEntry(source, msg string) models.LogEntry {
-	return models.LogEntry{
-		Timestamp: time.Now().UTC(),
-		Source:    source,
-		Level:     models.LevelError,
-		Message:   fmt.Sprintf("[logmx] %s", msg),
-	}
-}
-
-func send(ctx context.Context, ch chan<- models.LogEntry, e models.LogEntry) {
-	select {
-	case ch <- e:
-	case <-ctx.Done():
 	}
 }

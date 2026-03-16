@@ -2,111 +2,97 @@ package commands
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
-	"golang.org/x/term"
-
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/lucasnevespereira/logmx/internal/api"
 	"github.com/lucasnevespereira/logmx/internal/auth"
-	"github.com/lucasnevespereira/logmx/internal/provider/railway"
-	"github.com/lucasnevespereira/logmx/internal/provider/vercel"
 )
 
-var supportedProviders = []string{"vercel", "railway"}
+var tokenURLs = map[string]string{
+	"vercel":  "https://vercel.com/account/tokens",
+	"railway": "https://railway.com/account/tokens",
+}
 
 func authCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth <provider>",
 		Short: "Authenticate with a cloud provider",
-		Long: fmt.Sprintf("Authenticate with a cloud provider.\n\nSupported providers: %s",
+		Long: fmt.Sprintf("Save an API token for a cloud provider.\n\nSupported: %s",
 			strings.Join(supportedProviders, ", ")),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			provider := strings.ToLower(args[0])
-
 			if !isSupportedProvider(provider) {
 				return fmt.Errorf("unknown provider %q — supported: %s",
 					provider, strings.Join(supportedProviders, ", "))
 			}
 
-			store := auth.NewStore()
-			if err := store.Load(); err != nil {
-				return err
-			}
-
-			fmt.Printf("Authenticate with %s\n", provider)
-			fmt.Printf("Create a token at: %s\n\n", tokenURL(provider))
-			fmt.Print("Paste your token: ")
-
-			tokenBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-			fmt.Println()
-			if err != nil {
-				return fmt.Errorf("reading token: %w", err)
-			}
-
-			token := strings.TrimSpace(string(tokenBytes))
-			if token == "" {
-				return fmt.Errorf("token cannot be empty")
-			}
-
-			// Validate the token
-			fmt.Print("Verifying... ")
-			name, err := validateToken(provider, token)
-			if err != nil {
-				fmt.Println("failed")
-				return fmt.Errorf("invalid token: %w", err)
-			}
-			fmt.Printf("authenticated as %s\n", name)
-
-			store.Set(provider, token)
-			if err := store.Save(); err != nil {
-				return fmt.Errorf("saving token: %w", err)
-			}
-
-			fmt.Printf("\nRun 'logmx add' to pick projects from %s.\n", provider)
-			return nil
+			return runAuth(provider)
 		},
 	}
 
 	return cmd
 }
 
-func isSupportedProvider(p string) bool {
-	for _, s := range supportedProviders {
-		if s == p {
-			return true
-		}
-	}
-	return false
-}
+func runAuth(provider string) error {
+	fmt.Printf("Create a token at: %s\n\n", tokenURLs[provider])
 
-func tokenURL(provider string) string {
-	switch provider {
-	case "vercel":
-		return "https://vercel.com/account/tokens"
-	case "railway":
-		return "https://railway.app/account/tokens"
-	default:
-		return ""
+	var token string
+	err := huh.NewInput().
+		Title(fmt.Sprintf("Paste your %s token", provider)).
+		EchoMode(huh.EchoModePassword).
+		Value(&token).
+		Run()
+	if err != nil {
+		return err
 	}
+
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return fmt.Errorf("token cannot be empty")
+	}
+
+	fmt.Print("Verifying... ")
+	name, err := validateToken(provider, token)
+	if err != nil {
+		fmt.Println("failed")
+		return fmt.Errorf("invalid token: %w", err)
+	}
+	fmt.Printf("authenticated as %s\n", name)
+
+	store, err := auth.Load(auth.DefaultPath())
+	if err != nil {
+		return err
+	}
+	store.Tokens[provider] = token
+	if err := auth.Save(auth.DefaultPath(), store); err != nil {
+		return fmt.Errorf("saving token: %w", err)
+	}
+
+	fmt.Printf("\nRun 'logmx setup' or 'logmx source add' to pick projects.\n")
+	return nil
 }
 
 func validateToken(provider, token string) (string, error) {
 	switch provider {
 	case "vercel":
-		c := vercel.NewClient(token)
-		u, err := c.GetUser()
+		c := api.NewVercelClient(token)
+		u, err := c.ValidateToken()
 		if err != nil {
 			return "", err
 		}
 		return u.Username, nil
 	case "railway":
-		c := railway.NewClient(token)
-		u, err := c.GetUser()
+		c := api.NewRailwayClient(token)
+		u, err := c.ValidateToken()
 		if err != nil {
 			return "", err
+		}
+		if u.Name != "" {
+			return u.Name, nil
 		}
 		return u.Email, nil
 	default:

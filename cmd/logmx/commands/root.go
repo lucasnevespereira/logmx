@@ -10,12 +10,10 @@ func Root() *cobra.Command {
 		Short: "Aggregate and stream logs from multiple cloud platforms",
 	}
 
-	cmd.AddCommand(tailCmd())
-	cmd.AddCommand(sourcesCmd())
-	cmd.AddCommand(initCmd())
+	cmd.AddCommand(setupCmd())
 	cmd.AddCommand(authCmd())
-	cmd.AddCommand(addCmd())
-	cmd.AddCommand(removeCmd())
+	cmd.AddCommand(sourceCmd())
+	cmd.AddCommand(tailCmd())
 
 	return cmd
 }

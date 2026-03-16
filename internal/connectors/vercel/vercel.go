@@ -1,126 +1,123 @@
 package vercel
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/lucasnevespereira/logmx/internal/connectors"
 	"github.com/lucasnevespereira/logmx/internal/models"
-	provider "github.com/lucasnevespereira/logmx/internal/provider/vercel"
-	"github.com/lucasnevespereira/logmx/internal/retry"
 )
 
 type Connector struct {
 	Source    string
 	ProjectID string
-	Token    string
+	Token     string
+	Limit     int
 }
 
 func (c *Connector) Name() string {
 	return c.Source
 }
 
+type vercelLogLine struct {
+	Message        string `json:"message"`
+	Timestamp      int64  `json:"timestamp"`
+	Level          string `json:"level"`
+	RequestPath    string `json:"requestPath"`
+	Path           string `json:"path"`
+	StatusCode     int    `json:"statusCode"`
+	ResponseStatus int    `json:"responseStatusCode"`
+}
+
 func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error {
-	client := provider.NewClient(c.Token)
-
 	go func() {
-		var deploymentID string
-		var since int64
+		limit := c.Limit
+		if limit == 0 {
+			limit = 100
+		}
 
-		retry.Backoff(ctx, 30*time.Second, func() error {
-			// Resolve deployment if needed
-			if deploymentID == "" {
-				deployments, err := client.ListDeployments(c.ProjectID, 1)
-				if err != nil {
-					send(ctx, ch, errEntry(c.Source, "failed to list deployments: "+err.Error()))
-					return err
-				}
-				if len(deployments) == 0 {
-					send(ctx, ch, errEntry(c.Source, "no deployments found"))
-					return fmt.Errorf("no deployments")
-				}
-				deploymentID = deployments[0].UID
-				since = 0
+		args := []string{"logs", "--json", "--project", c.ProjectID, "--limit", fmt.Sprintf("%d", limit)}
+		if c.Token != "" {
+			args = append(args, "--token", c.Token)
+		}
+
+		cmd := exec.CommandContext(ctx, "vercel", args...)
+		out, err := cmd.Output()
+		if err != nil {
+			connectors.Send(ctx, ch, models.LogEntry{
+				Timestamp: time.Now().UTC(),
+				Source:    c.Source,
+				Level:     models.LevelError,
+				Message:   fmt.Sprintf("vercel logs: %v", err),
+			})
+			return
+		}
+
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
 			}
 
-			events, err := client.GetDeploymentEvents(ctx, deploymentID, since, 100)
-			if err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
-				return err
+			var log vercelLogLine
+			if err := json.Unmarshal(line, &log); err != nil {
+				continue
 			}
 
-			for _, ev := range events {
-				if ev.Text == "" {
-					continue
-				}
-				entry := models.LogEntry{
-					Timestamp: time.UnixMilli(ev.Date),
-					Source:    c.Source,
-					Level:     parseLevel(ev.Type, ev.Text),
-					Message:   ev.Text,
-				}
-				send(ctx, ch, entry)
-
-				if ev.Date > since {
-					since = ev.Date + 1
-				}
+			msg := log.Message
+			path := log.RequestPath
+			if path == "" {
+				path = log.Path
+			}
+			statusCode := log.ResponseStatus
+			if statusCode == 0 {
+				statusCode = log.StatusCode
+			}
+			if msg == "" && path != "" {
+				msg = fmt.Sprintf("%s %d", path, statusCode)
+			}
+			if msg == "" {
+				continue
 			}
 
-			// Check for new deployments when idle
-			if len(events) == 0 {
-				newDeps, err := client.ListDeployments(c.ProjectID, 1)
-				if err == nil && len(newDeps) > 0 && newDeps[0].UID != deploymentID {
-					deploymentID = newDeps[0].UID
-					since = 0
-					send(ctx, ch, models.LogEntry{
-						Timestamp: time.Now().UTC(),
-						Source:    c.Source,
-						Level:     models.LevelInfo,
-						Message:   fmt.Sprintf("new deployment detected: %s", deploymentID[:12]),
-					})
-				}
+			ts := time.UnixMilli(log.Timestamp)
+			if log.Timestamp == 0 {
+				ts = time.Now().UTC()
 			}
 
-			time.Sleep(2 * time.Second)
-			return nil // success — resets backoff
-		})
+			connectors.Send(ctx, ch, models.LogEntry{
+				Timestamp: ts,
+				Source:    c.Source,
+				Level:     parseLevel(log.Level, statusCode),
+				Message:   msg,
+			})
+		}
 	}()
-
 	return nil
 }
 
-func parseLevel(evType, text string) models.LogLevel {
-	if evType == "stderr" {
+func parseLevel(level string, statusCode int) models.LogLevel {
+	switch strings.ToLower(level) {
+	case "error", "fatal":
 		return models.LevelError
-	}
-	lower := strings.ToLower(text)
-	switch {
-	case strings.Contains(lower, "error") || strings.Contains(lower, "fatal"):
-		return models.LevelError
-	case strings.Contains(lower, "warn"):
+	case "warning", "warn":
 		return models.LevelWarn
-	case strings.Contains(lower, "debug"):
+	case "debug":
 		return models.LevelDebug
-	default:
-		return models.LevelInfo
 	}
-}
 
-func errEntry(source, msg string) models.LogEntry {
-	return models.LogEntry{
-		Timestamp: time.Now().UTC(),
-		Source:    source,
-		Level:     models.LevelError,
-		Message:   msg,
+	if statusCode >= 500 {
+		return models.LevelError
 	}
-}
+	if statusCode >= 400 {
+		return models.LevelWarn
+	}
 
-func send(ctx context.Context, ch chan<- models.LogEntry, e models.LogEntry) {
-	select {
-	case ch <- e:
-	case <-ctx.Done():
-	}
+	return models.LevelInfo
 }

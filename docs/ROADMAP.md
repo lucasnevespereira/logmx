@@ -2,34 +2,40 @@
 
 ## v0.0.1 — MVP
 
-- [x] `logmx tail` CLI command
-- [x] Demo connector with async streaming
-- [x] Colored terminal output
-- [x] `LogEntry` model with level, source, timestamp
-- [x] Concurrent streaming from multiple sources
-- [x] Filter by log level (`--level error`)
+- [x] `logmx tail` fetches recent runtime logs from all configured sources
+- [x] Colored terminal output with log level parsing
+- [x] Fetch logs from multiple sources concurrently
+- [x] Filter by log level (`--level error`) and source (`--source api`)
+- [x] Limit results per source (`--limit 50`)
 - [x] Config file (`~/.config/logmx/config.yaml`)
-- [x] `logmx auth <provider>` — token-based auth (Vercel, Railway)
-- [x] `logmx add` — interactive project picker
-- [x] `logmx sources` / `logmx remove`
-- [x] Vercel connector (polls deployment events, detects new deployments)
-- [x] Railway connector (polls deployment logs via GraphQL)
-- [x] Reconnection with exponential backoff
+- [x] Token-based auth stored locally (`~/.config/logmx/auth.json`)
+- [x] `logmx auth` — paste API token, validated via provider API
+- [x] `logmx setup` — TUI wizard (pick providers, paste tokens, install CLIs, pick sources)
+- [x] `logmx source add/list/remove` — manage sources
+- [x] Project listing via Vercel REST API and Railway GraphQL API
+- [x] Log fetching via provider CLIs with `--token` passthrough
+- [x] CLI dependency check + auto-install in setup wizard
 - [x] Log ordering by timestamp across sources
+- [x] Demo mode (no config needed)
 
-## v0.0.2 — More Providers & Polish
+## v0.0.2 — Local Log Storage & Search
+
+- [ ] Local log storage — `tail` saves fetched logs to local SQLite
+- [ ] `logmx search "timeout"` — full-text search across all stored logs
+- [ ] `logmx search --since 7d --level error` — filter stored logs by time & level
+- [ ] `logmx tail --grep "timeout"` — filter by keyword
+
+## v0.0.3 — More Providers & Distribution
 
 - [ ] GCP Cloud Logging connector
 - [ ] Render connector
-- [ ] Filter by keyword / regex (`logmx tail --grep "timeout"`)
-- [ ] `logmx search "timeout"` — search recent logs across sources
+- [ ] Docker / Kubernetes connector
 - [ ] goreleaser + Homebrew tap
 
 ## Future Ideas
 
-These are not committed but worth exploring:
-
-- **Interactive TUI** — press `/` to search, `f` to filter
-- **Local log caching** — `logmx search "database"` over recent history
+- **Live streaming** — `logmx tail --follow` for real-time log streaming
+- **Interactive TUI** — press `/` to search, `f` to filter, live dashboard
 - **Metrics view** — errors per service, warnings per minute
-- **Docker / Kubernetes** — `logmx tail --apps docker,k8s`
+- **Alerts** — `logmx watch --level error --notify slack`
+- **Log export** — `logmx export --format json --since 24h`
