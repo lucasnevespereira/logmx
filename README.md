@@ -3,9 +3,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/lucasnevespereira/logmx/ci.yml?style=flat-square)](https://github.com/lucasnevespereira/logmx/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/lucasnevespereira/logmx?style=flat-square)](https://github.com/lucasnevespereira/logmx/releases/latest)
 
-> Aggregate and stream logs from multiple platforms into a single terminal view.
-
-Stop switching between Vercel, Railway dashboards. `logmx` streams all your logs into one place.
+Aggregate and stream logs from multiple platforms into a single terminal view.
 
 ```
 21:04:12 vercel   INFO  request completed in 42ms
