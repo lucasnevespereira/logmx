@@ -20,6 +20,7 @@ type Connector struct {
 	ServiceID string
 	Token     string
 	Limit     int
+	Follow    bool
 }
 
 func (c *Connector) Name() string {
@@ -33,57 +34,64 @@ type railwayLogLine struct {
 }
 
 func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error {
-	go func() {
-		args := []string{"logs", "--json"}
-		if c.ServiceID != "" {
-			args = append(args, "-s", c.ServiceID)
+	args := []string{"logs", "--json"}
+	if c.ServiceID != "" {
+		args = append(args, "-s", c.ServiceID)
+	}
+	if c.Follow {
+		args = append(args, "--follow")
+	}
+
+	cmd := exec.CommandContext(ctx, "railway", args...)
+	if c.Token != "" {
+		cmd.Env = append(os.Environ(), "RAILWAY_TOKEN="+c.Token)
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		connectors.Send(ctx, ch, models.LogEntry{
+			Timestamp: time.Now().UTC(),
+			Source:    c.Source,
+			Level:     models.LevelError,
+			Message:   fmt.Sprintf("railway: %v", err),
+		})
+		return nil
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
 		}
 
-		cmd := exec.CommandContext(ctx, "railway", args...)
-		if c.Token != "" {
-			cmd.Env = append(os.Environ(), "RAILWAY_TOKEN="+c.Token)
+		var log railwayLogLine
+		if err := json.Unmarshal(line, &log); err != nil {
+			continue
 		}
 
-		out, err := cmd.Output()
-		if err != nil {
-			connectors.Send(ctx, ch, models.LogEntry{
-				Timestamp: time.Now().UTC(),
-				Source:    c.Source,
-				Level:     models.LevelError,
-				Message:   fmt.Sprintf("railway logs: %v", err),
-			})
-			return
+		if log.Message == "" {
+			continue
 		}
 
-		scanner := bufio.NewScanner(strings.NewReader(string(out)))
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if len(line) == 0 {
-				continue
-			}
-
-			var log railwayLogLine
-			if err := json.Unmarshal(line, &log); err != nil {
-				continue
-			}
-
-			if log.Message == "" {
-				continue
-			}
-
-			ts, _ := time.Parse(time.RFC3339Nano, log.Timestamp)
-			if ts.IsZero() {
-				ts = time.Now().UTC()
-			}
-
-			connectors.Send(ctx, ch, models.LogEntry{
-				Timestamp: ts,
-				Source:    c.Source,
-				Level:     parseLevel(log.Severity, log.Message),
-				Message:   log.Message,
-			})
+		ts, _ := time.Parse(time.RFC3339Nano, log.Timestamp)
+		if ts.IsZero() {
+			ts = time.Now().UTC()
 		}
-	}()
+
+		connectors.Send(ctx, ch, models.LogEntry{
+			Timestamp: ts,
+			Source:    c.Source,
+			Level:     parseLevel(log.Severity, log.Message),
+			Message:   log.Message,
+		})
+	}
+
+	cmd.Wait()
 	return nil
 }
 

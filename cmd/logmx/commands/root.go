@@ -6,8 +6,10 @@ import (
 
 func Root() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "logmx",
-		Short: "Aggregate and stream logs from multiple cloud platforms",
+		Use:           "logmx",
+		Short:         "Aggregate and stream logs from multiple cloud platforms",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	cmd.AddCommand(setupCmd())

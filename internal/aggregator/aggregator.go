@@ -3,6 +3,7 @@ package aggregator
 import (
 	"context"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/lucasnevespereira/logmx/internal/connectors"
@@ -23,11 +24,20 @@ func (a *Aggregator) Run(ctx context.Context) <-chan models.LogEntry {
 	raw := make(chan models.LogEntry, 100)
 	out := make(chan models.LogEntry, 100)
 
+	var wg sync.WaitGroup
 	for _, c := range a.connectors {
-		c.Start(ctx, raw)
+		wg.Add(1)
+		go func(c connectors.Connector) {
+			defer wg.Done()
+			c.Start(ctx, raw)
+		}(c)
 	}
 
-	// Collect entries in short windows, sort by timestamp, then flush.
+	go func() {
+		wg.Wait()
+		close(raw)
+	}()
+
 	go func() {
 		defer close(out)
 		ticker := time.NewTicker(flushInterval)

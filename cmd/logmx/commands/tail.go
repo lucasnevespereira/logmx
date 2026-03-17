@@ -28,17 +28,19 @@ func tailCmd() *cobra.Command {
 		level   string
 		cfgPath string
 		limit   int
+		follow  bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "tail",
 		Short: "Show recent logs from configured sources",
+		Long:  "Fetch recent logs from all configured sources.\nUse -f to stream logs in real time.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cfgPath == "" {
 				cfgPath = config.DefaultPath()
 			}
 
-			conns, err := buildConnectors(cfgPath, sources, limit)
+			conns, err := buildConnectors(cfgPath, sources, limit, follow)
 			if err != nil {
 				return err
 			}
@@ -74,18 +76,19 @@ func tailCmd() *cobra.Command {
 	cmd.Flags().StringVar(&level, "level", "", "Filter by log level (info, warn, error, debug)")
 	cmd.Flags().StringVar(&cfgPath, "config", "", "Path to config file")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 100, "Number of recent logs per source")
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Stream logs in real time")
 
 	return cmd
 }
 
-func buildConnectors(cfgPath string, sourceFilter string, limit int) ([]connectors.Connector, error) {
+func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool) ([]connectors.Connector, error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if config.IsNotExist(err) {
 			fmt.Println("No config found, using demo sources. Run 'logmx setup' to configure.")
 			return []connectors.Connector{
-				&demo.DemoConnector{Source: "vercel"},
-				&demo.DemoConnector{Source: "railway"},
+				&demo.DemoConnector{Source: "vercel", Follow: follow},
+				&demo.DemoConnector{Source: "railway", Follow: follow},
 			}, nil
 		}
 		return nil, err
@@ -112,7 +115,7 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int) ([]connecto
 		providers = append(providers, src.Provider)
 
 		token := store.Tokens[src.Provider]
-		c, err := connectorForSource(src, token, limit)
+		c, err := connectorForSource(src, token, limit, follow)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping source %q: %v\n", src.Name, err)
 			continue
@@ -130,10 +133,10 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int) ([]connecto
 	return conns, nil
 }
 
-func connectorForSource(src config.Source, token string, limit int) (connectors.Connector, error) {
+func connectorForSource(src config.Source, token string, limit int, follow bool) (connectors.Connector, error) {
 	switch src.Provider {
 	case "demo":
-		return &demo.DemoConnector{Source: src.Name}, nil
+		return &demo.DemoConnector{Source: src.Name, Follow: follow}, nil
 
 	case "vercel":
 		return &connVercel.Connector{
@@ -141,6 +144,7 @@ func connectorForSource(src config.Source, token string, limit int) (connectors.
 			ProjectID: src.Project,
 			Token:     token,
 			Limit:     limit,
+			Follow:    follow,
 		}, nil
 
 	case "railway":
@@ -150,6 +154,7 @@ func connectorForSource(src config.Source, token string, limit int) (connectors.
 			ServiceID: src.Service,
 			Token:     token,
 			Limit:     limit,
+			Follow:    follow,
 		}, nil
 
 	default:

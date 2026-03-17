@@ -41,16 +41,26 @@ That's it. All your logs, one stream, sorted by timestamp.
 ## Usage
 
 ```sh
+# Setup
 logmx setup                        # Interactive setup wizard
-logmx tail                         # Stream all sources
-logmx tail --source my-api,worker  # Stream specific sources
+
+# View logs
+logmx tail                         # Show recent logs and exit
+logmx tail -f                      # Stream logs in real time
+logmx tail -n 50                   # Show last 50 logs per source
+logmx tail --source my-api         # Filter by source
 logmx tail --level error           # Filter by log level
+logmx tail -f --source my-api      # Stream a specific source
+
+# Manage providers & sources
 logmx auth vercel                  # Add or refresh a provider token
 logmx source add                   # Add sources (pick provider)
 logmx source add --from vercel     # Add sources from a specific provider
 logmx source list                  # List configured sources
 logmx source remove my-docs        # Remove a source
 ```
+
+`tail` works like unix `tail` — shows recent logs and exits. Add `-f` to follow in real time, just like `tail -f`.
 
 ## Supported Providers
 

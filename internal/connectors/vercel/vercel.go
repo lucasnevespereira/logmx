@@ -18,6 +18,7 @@ type Connector struct {
 	ProjectID string
 	Token     string
 	Limit     int
+	Follow    bool
 }
 
 func (c *Connector) Name() string {
@@ -35,71 +36,84 @@ type vercelLogLine struct {
 }
 
 func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error {
-	go func() {
-		limit := c.Limit
-		if limit == 0 {
-			limit = 100
+	limit := c.Limit
+	if limit == 0 {
+		limit = 100
+	}
+
+	args := []string{"logs", "--json", "--project", c.ProjectID, "--limit", fmt.Sprintf("%d", limit)}
+	if c.Follow {
+		args = append(args, "--follow")
+	}
+	if c.Token != "" {
+		args = append(args, "--token", c.Token)
+	}
+
+	cmd := exec.CommandContext(ctx, "vercel", args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		connectors.Send(ctx, ch, models.LogEntry{
+			Timestamp: time.Now().UTC(),
+			Source:    c.Source,
+			Level:     models.LevelError,
+			Message:   fmt.Sprintf("vercel: %v", err),
+		})
+		return nil
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
 		}
 
-		args := []string{"logs", "--json", "--project", c.ProjectID, "--limit", fmt.Sprintf("%d", limit)}
-		if c.Token != "" {
-			args = append(args, "--token", c.Token)
+		var log vercelLogLine
+		if err := json.Unmarshal(line, &log); err != nil {
+			continue
 		}
 
-		cmd := exec.CommandContext(ctx, "vercel", args...)
-		out, err := cmd.Output()
-		if err != nil {
-			connectors.Send(ctx, ch, models.LogEntry{
-				Timestamp: time.Now().UTC(),
-				Source:    c.Source,
-				Level:     models.LevelError,
-				Message:   fmt.Sprintf("vercel logs: %v", err),
-			})
-			return
+		entry := parseEntry(c.Source, log)
+		if entry.Message == "" {
+			continue
 		}
 
-		scanner := bufio.NewScanner(strings.NewReader(string(out)))
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if len(line) == 0 {
-				continue
-			}
+		connectors.Send(ctx, ch, entry)
+	}
 
-			var log vercelLogLine
-			if err := json.Unmarshal(line, &log); err != nil {
-				continue
-			}
-
-			msg := log.Message
-			path := log.RequestPath
-			if path == "" {
-				path = log.Path
-			}
-			statusCode := log.ResponseStatus
-			if statusCode == 0 {
-				statusCode = log.StatusCode
-			}
-			if msg == "" && path != "" {
-				msg = fmt.Sprintf("%s %d", path, statusCode)
-			}
-			if msg == "" {
-				continue
-			}
-
-			ts := time.UnixMilli(log.Timestamp)
-			if log.Timestamp == 0 {
-				ts = time.Now().UTC()
-			}
-
-			connectors.Send(ctx, ch, models.LogEntry{
-				Timestamp: ts,
-				Source:    c.Source,
-				Level:     parseLevel(log.Level, statusCode),
-				Message:   msg,
-			})
-		}
-	}()
+	cmd.Wait()
 	return nil
+}
+
+func parseEntry(source string, log vercelLogLine) models.LogEntry {
+	msg := log.Message
+	path := log.RequestPath
+	if path == "" {
+		path = log.Path
+	}
+	statusCode := log.ResponseStatus
+	if statusCode == 0 {
+		statusCode = log.StatusCode
+	}
+	if msg == "" && path != "" {
+		msg = fmt.Sprintf("%s %d", path, statusCode)
+	}
+
+	ts := time.UnixMilli(log.Timestamp)
+	if log.Timestamp == 0 {
+		ts = time.Now().UTC()
+	}
+
+	return models.LogEntry{
+		Timestamp: ts,
+		Source:    source,
+		Level:     parseLevel(log.Level, statusCode),
+		Message:   msg,
+	}
 }
 
 func parseLevel(level string, statusCode int) models.LogLevel {

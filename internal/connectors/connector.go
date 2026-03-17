@@ -6,6 +6,8 @@ import (
 	"github.com/lucasnevespereira/logmx/internal/models"
 )
 
+// Connector fetches or streams log entries from a single source.
+// Start blocks until the source is exhausted or the context is cancelled.
 type Connector interface {
 	Name() string
 	Start(ctx context.Context, ch chan<- models.LogEntry) error

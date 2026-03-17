@@ -17,6 +17,7 @@
 - [x] CLI dependency check + auto-install in setup wizard
 - [x] Log ordering by timestamp across sources
 - [x] Demo mode (no config needed)
+- [x] `logmx tail -f` for real-time log streaming
 
 ## v0.0.2 — Local Log Storage & Search
 
@@ -33,8 +34,6 @@
 - [ ] goreleaser + Homebrew tap
 
 ## Future Ideas
-
-- **Live streaming** — `logmx tail --follow` for real-time log streaming
 - **Interactive TUI** — press `/` to search, `f` to filter, live dashboard
 - **Metrics view** — errors per service, warnings per minute
 - **Alerts** — `logmx watch --level error --notify slack`
