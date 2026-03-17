@@ -85,7 +85,7 @@ func (c *Connector) Start(ctx context.Context, ch chan<- log.LogEntry) error {
 		provider.Send(ctx, ch, entry)
 	}
 
-	cmd.Wait()
+	_ = cmd.Wait()
 	return nil
 }
 

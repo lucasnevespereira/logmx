@@ -29,7 +29,7 @@ func (a *Aggregator) Run(ctx context.Context) <-chan log.LogEntry {
 		wg.Add(1)
 		go func(c provider.Connector) {
 			defer wg.Done()
-			c.Start(ctx, raw)
+			_ = c.Start(ctx, raw)
 		}(c)
 	}
 

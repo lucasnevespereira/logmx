@@ -91,7 +91,7 @@ func (c *Connector) Start(ctx context.Context, ch chan<- log.LogEntry) error {
 		})
 	}
 
-	cmd.Wait()
+	_ = cmd.Wait()
 	return nil
 }
 
