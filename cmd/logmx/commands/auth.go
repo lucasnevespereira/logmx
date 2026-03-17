@@ -12,34 +12,45 @@ import (
 	"github.com/lucasnevespereira/logmx/internal/provider/vercel"
 )
 
-var tokenURLs = map[string]string{
-	"vercel":  "https://vercel.com/account/tokens",
-	"railway": "https://railway.com/account/tokens",
-}
-
 func authCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth <provider>",
 		Short: "Authenticate with a cloud provider",
-		Long: fmt.Sprintf("Save an API token for a cloud provider.\n\nSupported: %s",
+		Long: fmt.Sprintf("Authenticate with a cloud provider.\n\nSupported: %s",
 			strings.Join(supportedProviders, ", ")),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			provider := strings.ToLower(args[0])
-			if !isSupportedProvider(provider) {
+			prov := strings.ToLower(args[0])
+			if !isSupportedProvider(prov) {
 				return fmt.Errorf("unknown provider %q — supported: %s",
-					provider, strings.Join(supportedProviders, ", "))
+					prov, strings.Join(supportedProviders, ", "))
 			}
-
-			return runAuth(provider)
+			return runAuth(prov)
 		},
 	}
-
 	return cmd
 }
 
 func runAuth(prov string) error {
-	fmt.Printf("Create a token at: %s\n\n", tokenURLs[prov])
+	switch prov {
+	case "railway":
+		fmt.Println("Logging in to Railway CLI...")
+		if err := railway.LoginBrowserless(); err != nil {
+			return fmt.Errorf("railway login failed: %w", err)
+		}
+		fmt.Println("Railway authenticated.")
+		return nil
+
+	default:
+		return runTokenAuth(prov)
+	}
+}
+
+func runTokenAuth(prov string) error {
+	urls := map[string]string{
+		"vercel": "https://vercel.com/account/tokens",
+	}
+	fmt.Printf("Create a token at: %s\n\n", urls[prov])
 
 	var token string
 	err := huh.NewInput().
@@ -86,9 +97,6 @@ func validateToken(prov, token string) (string, error) {
 			return "", err
 		}
 		return u.Username, nil
-	case "railway":
-		c := railway.NewClient(token)
-		return c.ValidateToken()
 	default:
 		return "", fmt.Errorf("unknown provider")
 	}

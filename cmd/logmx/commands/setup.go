@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/lucasnevespereira/logmx/internal/config"
 	"github.com/lucasnevespereira/logmx/internal/provider"
+	"github.com/lucasnevespereira/logmx/internal/provider/railway"
 )
 
 var (
@@ -65,67 +67,48 @@ func runSetup(cfgPath string) error {
 		return nil
 	}
 
-	// Step 2: Authenticate (paste tokens)
+	// Step 2: Authenticate
 	fmt.Println()
 	fmt.Println(title.Render("  Authentication"))
 	fmt.Println()
 
-	store, err := config.LoadAuth(config.DefaultAuthPath())
-	if err != nil {
-		return err
-	}
-
 	var authenticated []string
 	for _, prov := range chosen {
-		if token := store.Tokens[prov]; token != "" {
-			name, err := validateToken(prov, token)
-			if err == nil {
-				fmt.Printf("  %s %s %s\n", success.Render("✓"), prov, dim.Render(fmt.Sprintf("(%s)", name)))
-				authenticated = append(authenticated, prov)
-				continue
-			}
-			fmt.Printf("  %s %s %s\n", warning.Render("✗"), prov, dim.Render("(token expired)"))
-		} else {
-			fmt.Printf("  %s %s %s\n", warning.Render("✗"), prov, dim.Render("(no token)"))
-		}
-
-		if err := runAuth(prov); err != nil {
-			fmt.Printf("  %s\n", errStyle.Render(fmt.Sprintf("Skipped: %v", err)))
+		if isAuthenticated(prov) {
+			authenticated = append(authenticated, prov)
 			continue
 		}
 
-		// Reload store after auth saved the token
-		store, err = config.LoadAuth(config.DefaultAuthPath())
-		if err != nil {
-			return err
+		if err := setupAuth(prov); err != nil {
+			fmt.Printf("  %s\n", errStyle.Render(fmt.Sprintf("Skipped: %v", err)))
+			continue
 		}
 		authenticated = append(authenticated, prov)
 	}
 
 	if len(authenticated) == 0 {
-		fmt.Println(errStyle.Render("\n  No providers authenticated. Run 'logmx auth <provider>' to add a token."))
+		fmt.Println(errStyle.Render("\n  No providers authenticated. Run 'logmx auth <provider>' to try again."))
 		return nil
 	}
 
-	// Step 3: Check CLI dependencies (needed for log streaming)
+	// Step 3: Check CLI dependencies
 	fmt.Println()
 	fmt.Println(title.Render("  Streaming dependencies"))
 	fmt.Println()
 
 	installCLIs(authenticated)
 
-	// Step 4: Pick sources via API
+	// Step 4: Pick sources
 	fmt.Println()
 	fmt.Println(title.Render("  Sources"))
 	fmt.Println()
 
 	var allSources []config.Source
 	for _, prov := range authenticated {
-		token := store.Tokens[prov]
 		dep := provider.ProviderDeps[prov]
 
 		fmt.Printf("  Fetching projects from %s...\n", dep.Name)
-		opts, err := fetchProjectOptions(prov, token)
+		opts, err := fetchProjectOptions(prov)
 		if err != nil {
 			fmt.Printf("  %s\n", errStyle.Render(fmt.Sprintf("Failed: %v", err)))
 			continue
@@ -162,10 +145,11 @@ func runSetup(cfgPath string) error {
 		for _, idx := range selected {
 			o := opts[idx]
 			allSources = append(allSources, config.Source{
-				Name:     o.Name,
-				Provider: prov,
-				Project:  o.Project,
-				Service:  o.Service,
+				Name:        o.Name,
+				Provider:    prov,
+				Project:     o.Project,
+				Service:     o.Service,
+				Environment: o.Environment,
 			})
 		}
 	}
@@ -208,6 +192,50 @@ func runSetup(cfgPath string) error {
 	fmt.Println(success.Render(fmt.Sprintf("  Added %d source(s) to %s", added, cfgPath)))
 	fmt.Println(dim.Render("  Run 'logmx tail' to start streaming.\n"))
 	return nil
+}
+
+// setupAuth authenticates a provider during the setup wizard.
+// Railway uses browser login for convenience; other providers use runAuth (token paste).
+func setupAuth(prov string) error {
+	if prov == "railway" {
+		fmt.Println("  Opening browser for Railway login...")
+		if err := railway.Login(); err != nil {
+			return fmt.Errorf("railway login failed: %w", err)
+		}
+		fmt.Printf("  %s Railway authenticated.\n", success.Render("✓"))
+		return nil
+	}
+	return runAuth(prov)
+}
+
+// isAuthenticated checks if the user is already logged in for a provider.
+func isAuthenticated(prov string) bool {
+	switch prov {
+	case "railway":
+		if name, err := railway.CheckLogin(); err == nil {
+			fmt.Printf("  %s %s %s\n", success.Render("✓"), prov, dim.Render(strings.TrimSpace(name)))
+			return true
+		}
+		fmt.Printf("  %s %s %s\n", warning.Render("✗"), prov, dim.Render("(not logged in)"))
+		return false
+	default:
+		store, err := config.LoadAuth(config.DefaultAuthPath())
+		if err != nil {
+			return false
+		}
+		token := store.Tokens[prov]
+		if token == "" {
+			fmt.Printf("  %s %s %s\n", warning.Render("✗"), prov, dim.Render("(no token)"))
+			return false
+		}
+		name, err := validateToken(prov, token)
+		if err != nil {
+			fmt.Printf("  %s %s %s\n", warning.Render("✗"), prov, dim.Render("(token expired)"))
+			return false
+		}
+		fmt.Printf("  %s %s %s\n", success.Render("✓"), prov, dim.Render(fmt.Sprintf("(%s)", name)))
+		return true
+	}
 }
 
 func installCLIs(providers []string) {

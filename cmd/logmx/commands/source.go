@@ -30,9 +30,10 @@ func sourceCmd() *cobra.Command {
 // --- source add ---
 
 type sourceOption struct {
-	Name    string
-	Project string
-	Service string
+	Name        string
+	Project     string
+	Service     string
+	Environment string
 }
 
 func sourceAddCmd() *cobra.Command {
@@ -73,18 +74,12 @@ func sourceAddCmd() *cobra.Command {
 					prov, strings.Join(supportedProviders, ", "))
 			}
 
-			store, err := config.LoadAuth(config.DefaultAuthPath())
-			if err != nil {
+			if err := checkProviderAuth(prov); err != nil {
 				return err
 			}
 
-			token := store.Tokens[prov]
-			if token == "" {
-				return fmt.Errorf("no token for %s — run 'logmx auth %s' first", prov, prov)
-			}
-
 			fmt.Printf("Fetching projects from %s...\n", prov)
-			sources, err := fetchProjectOptions(prov, token)
+			sources, err := fetchProjectOptions(prov)
 			if err != nil {
 				return fmt.Errorf("fetching projects: %w", err)
 			}
@@ -146,10 +141,11 @@ func sourceAddCmd() *cobra.Command {
 				}
 
 				cfg.Sources = append(cfg.Sources, config.Source{
-					Name:     s.Name,
-					Provider: prov,
-					Project:  s.Project,
-					Service:  s.Service,
+					Name:        s.Name,
+					Provider:    prov,
+					Project:     s.Project,
+					Service:     s.Service,
+					Environment: s.Environment,
 				})
 				existing[s.Name] = true
 				added++
@@ -270,10 +266,34 @@ func isSupportedProvider(p string) bool {
 	return false
 }
 
-func fetchProjectOptions(prov, token string) ([]sourceOption, error) {
+// checkProviderAuth verifies the user is authenticated for the given provider.
+func checkProviderAuth(prov string) error {
+	switch prov {
+	case "railway":
+		if _, err := railway.CheckLogin(); err != nil {
+			return fmt.Errorf("not logged in to Railway — run 'logmx auth railway' first")
+		}
+		return nil
+	default:
+		store, err := config.LoadAuth(config.DefaultAuthPath())
+		if err != nil {
+			return err
+		}
+		if store.Tokens[prov] == "" {
+			return fmt.Errorf("no token for %s — run 'logmx auth %s' first", prov, prov)
+		}
+		return nil
+	}
+}
+
+func fetchProjectOptions(prov string) ([]sourceOption, error) {
 	switch prov {
 	case "vercel":
-		c := vercel.NewClient(token)
+		store, err := config.LoadAuth(config.DefaultAuthPath())
+		if err != nil {
+			return nil, err
+		}
+		c := vercel.NewClient(store.Tokens["vercel"])
 		projects, err := c.ListProjects()
 		if err != nil {
 			return nil, err
@@ -285,22 +305,26 @@ func fetchProjectOptions(prov, token string) ([]sourceOption, error) {
 		return opts, nil
 
 	case "railway":
-		c := railway.NewClient(token)
-		projects, err := c.ListProjects()
+		projects, err := railway.ListProjects()
 		if err != nil {
 			return nil, err
 		}
 		var opts []sourceOption
 		for _, p := range projects {
+			envID := ""
+			if len(p.Environments) > 0 {
+				envID = p.Environments[0].ID
+			}
 			if len(p.Services) == 0 {
-				opts = append(opts, sourceOption{Name: p.Name, Project: p.ID})
+				opts = append(opts, sourceOption{Name: p.Name, Project: p.ID, Environment: envID})
 				continue
 			}
 			for _, svc := range p.Services {
 				opts = append(opts, sourceOption{
-					Name:    svc.Name,
-					Project: p.ID,
-					Service: svc.ID,
+					Name:        svc.Name,
+					Project:     p.ID,
+					Service:     svc.ID,
+					Environment: envID,
 				})
 			}
 		}

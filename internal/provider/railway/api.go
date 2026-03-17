@@ -1,28 +1,34 @@
+// Package railway wraps the Railway CLI to provide authentication,
+// project discovery, and log streaming.
+//
+// Unlike Vercel (which uses API tokens), Railway authentication is
+// delegated entirely to the Railway CLI. Users run `railway login`
+// once and the CLI stores its own session in ~/.railway/config.json.
+//
+// Auth flow:
+//   - logmx setup  → railway.Login()           (opens browser)
+//   - logmx auth   → railway.LoginBrowserless() (terminal-only, for re-auth)
+//
+// Project discovery:
+//   - railway list --json → returns projects, services, and environments
+//
+// Log streaming:
+//   - See logs.go for the temp-dir linking strategy used to run
+//     `railway logs` against specific projects without interactive `railway link`.
 package railway
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"os"
+	"os/exec"
 )
 
-const railwayGraphQL = "https://backboard.railway.com/graphql/v2"
-
-type Client struct {
-	token      string
-	httpClient *http.Client
-}
-
-func NewClient(token string) *Client {
-	return &Client{token: token, httpClient: &http.Client{}}
-}
-
 type Project struct {
-	ID       string
-	Name     string
-	Services []Service
+	ID           string
+	Name         string
+	Services     []Service
+	Environments []Environment
 }
 
 type Service struct {
@@ -30,113 +36,88 @@ type Service struct {
 	Name string
 }
 
-func (c *Client) ValidateToken() (string, error) {
-	var resp struct {
-		Data struct {
-			Projects struct {
-				Edges []struct {
-					Node struct {
-						Name string `json:"name"`
-					} `json:"node"`
-				} `json:"edges"`
-			} `json:"projects"`
-		} `json:"data"`
-	}
-
-	if err := c.query(`{ projects { edges { node { name } } } }`, &resp); err != nil {
-		return "", err
-	}
-
-	n := len(resp.Data.Projects.Edges)
-	if n == 0 {
-		return "0 projects", nil
-	}
-	return fmt.Sprintf("%d project(s)", n), nil
+type Environment struct {
+	ID   string
+	Name string
 }
 
-func (c *Client) ListProjects() ([]Project, error) {
-	var resp struct {
-		Data struct {
-			Projects struct {
-				Edges []struct {
-					Node struct {
-						ID       string `json:"id"`
-						Name     string `json:"name"`
-						Services struct {
-							Edges []struct {
-								Node struct {
-									ID   string `json:"id"`
-									Name string `json:"name"`
-								} `json:"node"`
-							} `json:"edges"`
-						} `json:"services"`
-					} `json:"node"`
-				} `json:"edges"`
-			} `json:"projects"`
-		} `json:"data"`
+// CheckLogin verifies the user is logged in to Railway CLI via `railway whoami`.
+func CheckLogin() (string, error) {
+	out, err := exec.Command("railway", "whoami").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("not logged in — run 'railway login' first")
+	}
+	return string(out), nil
+}
+
+// Login runs `railway login` which opens the browser for authentication.
+// Used during `logmx setup` for a smooth first-time experience.
+func Login() error {
+	cmd := exec.Command("railway", "login")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// LoginBrowserless runs `railway login --browserless` for terminal-only auth.
+// Used by `logmx auth railway` for re-authentication or headless environments.
+func LoginBrowserless() error {
+	cmd := exec.Command("railway", "login", "--browserless")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// ListProjects uses `railway list --json` to discover projects, services, and environments.
+func ListProjects() ([]Project, error) {
+	out, err := exec.Command("railway", "list", "--json").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("railway list: %s", string(out))
 	}
 
-	q := `{ projects { edges { node { id name services { edges { node { id name } } } } } } }`
-	if err := c.query(q, &resp); err != nil {
-		return nil, err
+	var raw []struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Services struct {
+			Edges []struct {
+				Node struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"node"`
+			} `json:"edges"`
+		} `json:"services"`
+		Environments struct {
+			Edges []struct {
+				Node struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"node"`
+			} `json:"edges"`
+		} `json:"environments"`
+	}
+
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("parsing railway list: %w", err)
 	}
 
 	var projects []Project
-	for _, e := range resp.Data.Projects.Edges {
-		p := Project{ID: e.Node.ID, Name: e.Node.Name}
-		for _, se := range e.Node.Services.Edges {
+	for _, r := range raw {
+		p := Project{ID: r.ID, Name: r.Name}
+		for _, se := range r.Services.Edges {
 			p.Services = append(p.Services, Service{
 				ID:   se.Node.ID,
 				Name: se.Node.Name,
 			})
 		}
+		for _, ee := range r.Environments.Edges {
+			p.Environments = append(p.Environments, Environment{
+				ID:   ee.Node.ID,
+				Name: ee.Node.Name,
+			})
+		}
 		projects = append(projects, p)
 	}
 	return projects, nil
-}
-
-type gqlResponse struct {
-	Errors []struct {
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
-func (c *Client) query(q string, out any) error {
-	body, err := json.Marshal(map[string]string{"query": q})
-	if err != nil {
-		return fmt.Errorf("marshaling query: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", railwayGraphQL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("invalid or expired token")
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API returned %d: %s", resp.StatusCode, string(b))
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("reading response: %w", err)
-	}
-
-	var gql gqlResponse
-	if err := json.Unmarshal(b, &gql); err == nil && len(gql.Errors) > 0 {
-		return fmt.Errorf("railway API: %s", gql.Errors[0].Message)
-	}
-
-	return json.Unmarshal(b, out)
 }
