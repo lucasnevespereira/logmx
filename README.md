@@ -27,23 +27,9 @@ go install github.com/lucasnevespereira/logmx/cmd/logmx@latest
 ## Quick Start
 
 ```sh
-logmx setup
+logmx setup    # pick providers, paste tokens, select projects
+logmx tail -f  # stream logs in real time
 ```
-
-The setup wizard walks you through everything:
-
-1. Pick your providers (Vercel, Railway)
-2. Paste an API token — validated instantly
-3. Installs streaming CLIs if missing
-4. Lists your projects via API — pick which ones to stream
-
-Then start streaming:
-
-```sh
-logmx tail
-```
-
-That's it. All your logs, one stream, sorted by timestamp.
 
 ## Usage
 
