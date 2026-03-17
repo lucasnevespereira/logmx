@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lucasnevespereira/logmx/internal/connectors"
-	"github.com/lucasnevespereira/logmx/internal/models"
+	"github.com/lucasnevespereira/logmx/internal/log"
+	"github.com/lucasnevespereira/logmx/internal/provider"
 )
 
 type Connector struct {
@@ -25,7 +25,7 @@ func (c *Connector) Name() string {
 	return c.Source
 }
 
-type vercelLogLine struct {
+type logLine struct {
 	Message        string `json:"message"`
 	Timestamp      int64  `json:"timestamp"`
 	Level          string `json:"level"`
@@ -35,7 +35,7 @@ type vercelLogLine struct {
 	ResponseStatus int    `json:"responseStatusCode"`
 }
 
-func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error {
+func (c *Connector) Start(ctx context.Context, ch chan<- log.LogEntry) error {
 	limit := c.Limit
 	if limit == 0 {
 		limit = 100
@@ -56,10 +56,10 @@ func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error 
 	}
 
 	if err := cmd.Start(); err != nil {
-		connectors.Send(ctx, ch, models.LogEntry{
+		provider.Send(ctx, ch, log.LogEntry{
 			Timestamp: time.Now().UTC(),
 			Source:    c.Source,
-			Level:     models.LevelError,
+			Level:     log.LevelError,
 			Message:   fmt.Sprintf("vercel: %v", err),
 		})
 		return nil
@@ -72,66 +72,66 @@ func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error 
 			continue
 		}
 
-		var log vercelLogLine
-		if err := json.Unmarshal(line, &log); err != nil {
+		var l logLine
+		if err := json.Unmarshal(line, &l); err != nil {
 			continue
 		}
 
-		entry := parseEntry(c.Source, log)
+		entry := parseEntry(c.Source, l)
 		if entry.Message == "" {
 			continue
 		}
 
-		connectors.Send(ctx, ch, entry)
+		provider.Send(ctx, ch, entry)
 	}
 
 	cmd.Wait()
 	return nil
 }
 
-func parseEntry(source string, log vercelLogLine) models.LogEntry {
-	msg := log.Message
-	path := log.RequestPath
+func parseEntry(source string, l logLine) log.LogEntry {
+	msg := l.Message
+	path := l.RequestPath
 	if path == "" {
-		path = log.Path
+		path = l.Path
 	}
-	statusCode := log.ResponseStatus
+	statusCode := l.ResponseStatus
 	if statusCode == 0 {
-		statusCode = log.StatusCode
+		statusCode = l.StatusCode
 	}
 	if msg == "" && path != "" {
 		msg = fmt.Sprintf("%s %d", path, statusCode)
 	}
 
-	ts := time.UnixMilli(log.Timestamp)
-	if log.Timestamp == 0 {
+	ts := time.UnixMilli(l.Timestamp)
+	if l.Timestamp == 0 {
 		ts = time.Now().UTC()
 	}
 
-	return models.LogEntry{
+	return log.LogEntry{
 		Timestamp: ts,
 		Source:    source,
-		Level:     parseLevel(log.Level, statusCode),
+		Level:     parseLevel(l.Level, statusCode),
 		Message:   msg,
 	}
 }
 
-func parseLevel(level string, statusCode int) models.LogLevel {
+func parseLevel(level string, statusCode int) log.LogLevel {
 	switch strings.ToLower(level) {
 	case "error", "fatal":
-		return models.LevelError
+		return log.LevelError
 	case "warning", "warn":
-		return models.LevelWarn
+		return log.LevelWarn
 	case "debug":
-		return models.LevelDebug
+		return log.LevelDebug
 	}
 
 	if statusCode >= 500 {
-		return models.LevelError
+		return log.LevelError
 	}
 	if statusCode >= 400 {
-		return models.LevelWarn
+		return log.LevelWarn
 	}
 
-	return models.LevelInfo
+	return log.LevelInfo
 }

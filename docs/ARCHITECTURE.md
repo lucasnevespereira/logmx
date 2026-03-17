@@ -2,7 +2,7 @@
 
 ## Overview
 
-logmx is built around **connectors** — one per cloud provider — that each stream logs into a shared aggregator, which merges them and outputs to the terminal.
+logmx is built around **providers** — one per cloud platform — that each stream logs into a shared aggregator, which merges them and outputs to the terminal.
 
 ```
 +-------------------+
@@ -17,7 +17,7 @@ logmx is built around **connectors** — one per cloud provider — that each st
           |
           v
 +-------------------+
-| Connectors        |
+| Providers         |
 | vercel            |
 | railway           |
 | gcp               |
@@ -35,17 +35,20 @@ Library: [`cobra`](https://github.com/spf13/cobra)
 
 ### Aggregator
 
-Starts connectors concurrently via goroutines, merges their output into a single `chan LogEntry`, and forwards entries to the printer.
+Starts providers concurrently via goroutines, merges their output into a single `chan LogEntry`, sorts by timestamp in 500ms windows, and forwards entries to the printer. Uses a `sync.WaitGroup` to close the channel cleanly when all providers finish.
 
-### Connectors
+### Providers
 
-Each connector implements the `Connector` interface, authenticates to a provider, and streams `LogEntry` values into the shared channel.
+Each provider implements the `Connector` interface. A provider directory contains:
 
-Planned connectors: Vercel, Railway, GCP, Render, Heroku, Docker, Kubernetes.
+- `api.go` — HTTP client for the provider's API (list projects, validate tokens)
+- `logs.go` — log fetching and streaming via the provider's CLI
+
+Supported: Vercel, Railway. Planned: GCP, Render, Docker, Kubernetes.
 
 ## Log Model
 
-All connectors normalize logs into a single structure:
+All providers normalize logs into a single structure:
 
 ```go
 type LogEntry struct {
@@ -70,34 +73,37 @@ sources:
     service: srv_xxx
 ```
 
+Auth tokens are stored in `~/.config/logmx/auth.json`.
+
 ## Project Structure
 
 ```
 logmx/
-├── go.mod
-├── cmd/
-│   └── logmx/
-│       ├── main.go              ← entry point
-│       └── commands/
-│           ├── root.go          ← cobra root command
-│           ├── tail.go          ← tail command
-│           ├── sources.go       ← sources command
-│           └── init.go          ← init command
+├── cmd/logmx/
+│   ├── main.go                         ← entry point
+│   └── commands/
+│       ├── root.go                     ← cobra root command
+│       ├── tail.go                     ← tail command (fetch + follow)
+│       ├── auth.go                     ← auth command
+│       ├── setup.go                    ← interactive setup wizard
+│       └── source.go                   ← source add/list/remove
 └── internal/
-    ├── models/
-    │   └── log.go               ← LogEntry, LogLevel
-    ├── config/
-    │   └── config.go            ← YAML config loading
+    ├── provider/
+    │   ├── provider.go                 ← Connector interface, deps registry
+    │   ├── vercel/
+    │   │   ├── api.go                  ← Vercel REST API client
+    │   │   └── logs.go                 ← log fetching/streaming via CLI
+    │   ├── railway/
+    │   │   ├── api.go                  ← Railway GraphQL API client
+    │   │   └── logs.go                 ← log fetching/streaming via CLI
+    │   └── demo/
+    │       └── demo.go                 ← demo connector (mock data)
     ├── aggregator/
-    │   └── aggregator.go        ← merges connector channels
-    └── connectors/
-        ├── connector.go         ← Connector interface
-        ├── demo/
-        │   └── demo.go
-        ├── vercel/
-        │   └── vercel.go
-        ├── railway/
-        │   └── railway.go
-        └── gcp/
-            └── gcp.go
+    │   └── aggregator.go               ← merges provider channels
+    ├── config/
+    │   ├── config.go                   ← config.yaml management
+    │   └── auth.go                     ← auth.json token store
+    └── log/
+        ├── entry.go                    ← LogEntry, LogLevel
+        └── printer.go                  ← colored terminal output
 ```

@@ -11,15 +11,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lucasnevespereira/logmx/internal/aggregator"
-	"github.com/lucasnevespereira/logmx/internal/auth"
-	"github.com/lucasnevespereira/logmx/internal/cli"
 	"github.com/lucasnevespereira/logmx/internal/config"
-	"github.com/lucasnevespereira/logmx/internal/connectors"
-	"github.com/lucasnevespereira/logmx/internal/connectors/demo"
-	connRailway "github.com/lucasnevespereira/logmx/internal/connectors/railway"
-	connVercel "github.com/lucasnevespereira/logmx/internal/connectors/vercel"
-	"github.com/lucasnevespereira/logmx/internal/models"
-	"github.com/lucasnevespereira/logmx/internal/printer"
+	"github.com/lucasnevespereira/logmx/internal/log"
+	"github.com/lucasnevespereira/logmx/internal/provider"
+	"github.com/lucasnevespereira/logmx/internal/provider/demo"
+	provRailway "github.com/lucasnevespereira/logmx/internal/provider/railway"
+	provVercel "github.com/lucasnevespereira/logmx/internal/provider/vercel"
 )
 
 func tailCmd() *cobra.Command {
@@ -56,16 +53,16 @@ func tailCmd() *cobra.Command {
 			agg := aggregator.New(conns)
 			ch := agg.Run(ctx)
 
-			var levelFilter models.LogLevel
+			var levelFilter log.LogLevel
 			if level != "" {
-				levelFilter = models.LogLevel(strings.ToUpper(level))
+				levelFilter = log.LogLevel(strings.ToUpper(level))
 			}
 
 			for entry := range ch {
 				if levelFilter != "" && entry.Level != levelFilter {
 					continue
 				}
-				printer.PrintEntry(entry)
+				log.PrintEntry(entry)
 			}
 
 			return nil
@@ -81,12 +78,12 @@ func tailCmd() *cobra.Command {
 	return cmd
 }
 
-func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool) ([]connectors.Connector, error) {
+func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool) ([]provider.Connector, error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if config.IsNotExist(err) {
 			fmt.Println("No config found, using demo sources. Run 'logmx setup' to configure.")
-			return []connectors.Connector{
+			return []provider.Connector{
 				&demo.DemoConnector{Source: "vercel", Follow: follow},
 				&demo.DemoConnector{Source: "railway", Follow: follow},
 			}, nil
@@ -94,7 +91,7 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool
 		return nil, err
 	}
 
-	store, err := auth.Load(auth.DefaultPath())
+	store, err := config.LoadAuth(config.DefaultAuthPath())
 	if err != nil {
 		return nil, fmt.Errorf("loading auth: %w", err)
 	}
@@ -107,7 +104,7 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool
 	}
 
 	var providers []string
-	var conns []connectors.Connector
+	var conns []provider.Connector
 	for _, src := range cfg.Sources {
 		if len(allowed) > 0 && !allowed[src.Name] {
 			continue
@@ -123,7 +120,7 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool
 		conns = append(conns, c)
 	}
 
-	if missing := cli.MissingDeps(providers); len(missing) > 0 {
+	if missing := provider.MissingDeps(providers); len(missing) > 0 {
 		for _, dep := range missing {
 			fmt.Fprintf(os.Stderr, "missing: %s — install with: %s\n", dep.Name, dep.InstallCmd)
 		}
@@ -133,13 +130,13 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool
 	return conns, nil
 }
 
-func connectorForSource(src config.Source, token string, limit int, follow bool) (connectors.Connector, error) {
+func connectorForSource(src config.Source, token string, limit int, follow bool) (provider.Connector, error) {
 	switch src.Provider {
 	case "demo":
 		return &demo.DemoConnector{Source: src.Name, Follow: follow}, nil
 
 	case "vercel":
-		return &connVercel.Connector{
+		return &provVercel.Connector{
 			Source:    src.Name,
 			ProjectID: src.Project,
 			Token:     token,
@@ -148,7 +145,7 @@ func connectorForSource(src config.Source, token string, limit int, follow bool)
 		}, nil
 
 	case "railway":
-		return &connRailway.Connector{
+		return &provRailway.Connector{
 			Source:    src.Name,
 			ProjectID: src.Project,
 			ServiceID: src.Service,

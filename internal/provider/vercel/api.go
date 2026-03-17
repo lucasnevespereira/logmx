@@ -1,4 +1,4 @@
-package api
+package vercel
 
 import (
 	"encoding/json"
@@ -9,23 +9,23 @@ import (
 
 const vercelBase = "https://api.vercel.com"
 
-type VercelClient struct {
+type Client struct {
 	token      string
 	httpClient *http.Client
 }
 
-func NewVercelClient(token string) *VercelClient {
-	return &VercelClient{token: token, httpClient: &http.Client{}}
+func NewClient(token string) *Client {
+	return &Client{token: token, httpClient: &http.Client{}}
 }
 
-type VercelUser struct {
+type User struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 }
 
-func (c *VercelClient) ValidateToken() (*VercelUser, error) {
+func (c *Client) ValidateToken() (*User, error) {
 	var resp struct {
-		User VercelUser `json:"user"`
+		User User `json:"user"`
 	}
 	if err := c.get("/v2/user", &resp); err != nil {
 		return nil, err
@@ -33,14 +33,14 @@ func (c *VercelClient) ValidateToken() (*VercelUser, error) {
 	return &resp.User, nil
 }
 
-type VercelProject struct {
+type Project struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-func (c *VercelClient) ListProjects() ([]VercelProject, error) {
+func (c *Client) ListProjects() ([]Project, error) {
 	var resp struct {
-		Projects []VercelProject `json:"projects"`
+		Projects []Project `json:"projects"`
 	}
 	if err := c.get("/v9/projects?limit=100", &resp); err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (c *VercelClient) ListProjects() ([]VercelProject, error) {
 	return resp.Projects, nil
 }
 
-func (c *VercelClient) get(path string, out any) error {
+func (c *Client) get(path string, out any) error {
 	req, err := http.NewRequest("GET", vercelBase+path, nil)
 	if err != nil {
 		return err

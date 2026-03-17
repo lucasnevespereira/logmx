@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lucasnevespereira/logmx/internal/connectors"
-	"github.com/lucasnevespereira/logmx/internal/models"
+	"github.com/lucasnevespereira/logmx/internal/log"
+	"github.com/lucasnevespereira/logmx/internal/provider"
 )
 
 type Connector struct {
@@ -27,13 +27,13 @@ func (c *Connector) Name() string {
 	return c.Source
 }
 
-type railwayLogLine struct {
+type logLine struct {
 	Message   string `json:"message"`
 	Timestamp string `json:"timestamp"`
 	Severity  string `json:"severity"`
 }
 
-func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error {
+func (c *Connector) Start(ctx context.Context, ch chan<- log.LogEntry) error {
 	args := []string{"logs", "--json"}
 	if c.ServiceID != "" {
 		args = append(args, "-s", c.ServiceID)
@@ -53,10 +53,10 @@ func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error 
 	}
 
 	if err := cmd.Start(); err != nil {
-		connectors.Send(ctx, ch, models.LogEntry{
+		provider.Send(ctx, ch, log.LogEntry{
 			Timestamp: time.Now().UTC(),
 			Source:    c.Source,
-			Level:     models.LevelError,
+			Level:     log.LevelError,
 			Message:   fmt.Sprintf("railway: %v", err),
 		})
 		return nil
@@ -69,25 +69,25 @@ func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error 
 			continue
 		}
 
-		var log railwayLogLine
-		if err := json.Unmarshal(line, &log); err != nil {
+		var l logLine
+		if err := json.Unmarshal(line, &l); err != nil {
 			continue
 		}
 
-		if log.Message == "" {
+		if l.Message == "" {
 			continue
 		}
 
-		ts, _ := time.Parse(time.RFC3339Nano, log.Timestamp)
+		ts, _ := time.Parse(time.RFC3339Nano, l.Timestamp)
 		if ts.IsZero() {
 			ts = time.Now().UTC()
 		}
 
-		connectors.Send(ctx, ch, models.LogEntry{
+		provider.Send(ctx, ch, log.LogEntry{
 			Timestamp: ts,
 			Source:    c.Source,
-			Level:     parseLevel(log.Severity, log.Message),
-			Message:   log.Message,
+			Level:     parseLevel(l.Severity, l.Message),
+			Message:   l.Message,
 		})
 	}
 
@@ -95,25 +95,25 @@ func (c *Connector) Start(ctx context.Context, ch chan<- models.LogEntry) error 
 	return nil
 }
 
-func parseLevel(severity, text string) models.LogLevel {
+func parseLevel(severity, text string) log.LogLevel {
 	switch strings.ToLower(severity) {
 	case "error", "err", "critical", "fatal":
-		return models.LevelError
+		return log.LevelError
 	case "warn", "warning":
-		return models.LevelWarn
+		return log.LevelWarn
 	case "debug":
-		return models.LevelDebug
+		return log.LevelDebug
 	case "info":
-		return models.LevelInfo
+		return log.LevelInfo
 	}
 
 	lower := strings.ToLower(text)
 	switch {
 	case strings.Contains(lower, "error") || strings.Contains(lower, "fatal"):
-		return models.LevelError
+		return log.LevelError
 	case strings.Contains(lower, "warn"):
-		return models.LevelWarn
+		return log.LevelWarn
 	default:
-		return models.LevelInfo
+		return log.LevelInfo
 	}
 }

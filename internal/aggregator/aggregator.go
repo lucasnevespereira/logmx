@@ -6,28 +6,28 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucasnevespereira/logmx/internal/connectors"
-	"github.com/lucasnevespereira/logmx/internal/models"
+	"github.com/lucasnevespereira/logmx/internal/log"
+	"github.com/lucasnevespereira/logmx/internal/provider"
 )
 
 const flushInterval = 500 * time.Millisecond
 
 type Aggregator struct {
-	connectors []connectors.Connector
+	connectors []provider.Connector
 }
 
-func New(conns []connectors.Connector) *Aggregator {
+func New(conns []provider.Connector) *Aggregator {
 	return &Aggregator{connectors: conns}
 }
 
-func (a *Aggregator) Run(ctx context.Context) <-chan models.LogEntry {
-	raw := make(chan models.LogEntry, 100)
-	out := make(chan models.LogEntry, 100)
+func (a *Aggregator) Run(ctx context.Context) <-chan log.LogEntry {
+	raw := make(chan log.LogEntry, 100)
+	out := make(chan log.LogEntry, 100)
 
 	var wg sync.WaitGroup
 	for _, c := range a.connectors {
 		wg.Add(1)
-		go func(c connectors.Connector) {
+		go func(c provider.Connector) {
 			defer wg.Done()
 			c.Start(ctx, raw)
 		}(c)
@@ -43,7 +43,7 @@ func (a *Aggregator) Run(ctx context.Context) <-chan models.LogEntry {
 		ticker := time.NewTicker(flushInterval)
 		defer ticker.Stop()
 
-		var buf []models.LogEntry
+		var buf []log.LogEntry
 
 		for {
 			select {
@@ -67,7 +67,7 @@ func (a *Aggregator) Run(ctx context.Context) <-chan models.LogEntry {
 	return out
 }
 
-func flush(buf []models.LogEntry, out chan<- models.LogEntry) []models.LogEntry {
+func flush(buf []log.LogEntry, out chan<- log.LogEntry) []log.LogEntry {
 	if len(buf) == 0 {
 		return buf
 	}

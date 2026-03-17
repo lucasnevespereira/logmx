@@ -7,8 +7,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/lucasnevespereira/logmx/internal/api"
-	"github.com/lucasnevespereira/logmx/internal/auth"
+	"github.com/lucasnevespereira/logmx/internal/config"
+	"github.com/lucasnevespereira/logmx/internal/provider/railway"
+	"github.com/lucasnevespereira/logmx/internal/provider/vercel"
 )
 
 var tokenURLs = map[string]string{
@@ -37,12 +38,12 @@ func authCmd() *cobra.Command {
 	return cmd
 }
 
-func runAuth(provider string) error {
-	fmt.Printf("Create a token at: %s\n\n", tokenURLs[provider])
+func runAuth(prov string) error {
+	fmt.Printf("Create a token at: %s\n\n", tokenURLs[prov])
 
 	var token string
 	err := huh.NewInput().
-		Title(fmt.Sprintf("Paste your %s token", provider)).
+		Title(fmt.Sprintf("Paste your %s token", prov)).
 		EchoMode(huh.EchoModePassword).
 		Value(&token).
 		Run()
@@ -56,19 +57,19 @@ func runAuth(provider string) error {
 	}
 
 	fmt.Print("Verifying... ")
-	name, err := validateToken(provider, token)
+	name, err := validateToken(prov, token)
 	if err != nil {
 		fmt.Println("failed")
 		return fmt.Errorf("invalid token: %w", err)
 	}
 	fmt.Printf("authenticated as %s\n", name)
 
-	store, err := auth.Load(auth.DefaultPath())
+	store, err := config.LoadAuth(config.DefaultAuthPath())
 	if err != nil {
 		return err
 	}
-	store.Tokens[provider] = token
-	if err := auth.Save(auth.DefaultPath(), store); err != nil {
+	store.Tokens[prov] = token
+	if err := config.SaveAuth(config.DefaultAuthPath(), store); err != nil {
 		return fmt.Errorf("saving token: %w", err)
 	}
 
@@ -76,17 +77,17 @@ func runAuth(provider string) error {
 	return nil
 }
 
-func validateToken(provider, token string) (string, error) {
-	switch provider {
+func validateToken(prov, token string) (string, error) {
+	switch prov {
 	case "vercel":
-		c := api.NewVercelClient(token)
+		c := vercel.NewClient(token)
 		u, err := c.ValidateToken()
 		if err != nil {
 			return "", err
 		}
 		return u.Username, nil
 	case "railway":
-		c := api.NewRailwayClient(token)
+		c := railway.NewClient(token)
 		u, err := c.ValidateToken()
 		if err != nil {
 			return "", err

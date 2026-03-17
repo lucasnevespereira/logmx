@@ -1,4 +1,4 @@
-package auth
+package config
 
 import (
 	"encoding/json"
@@ -8,25 +8,25 @@ import (
 	"path/filepath"
 )
 
-type Store struct {
+type AuthStore struct {
 	Tokens map[string]string `json:"tokens"`
 }
 
-func DefaultPath() string {
+func DefaultAuthPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "logmx", "auth.json")
 }
 
-func Load(path string) (*Store, error) {
+func LoadAuth(path string) (*AuthStore, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return &Store{Tokens: make(map[string]string)}, nil
+			return &AuthStore{Tokens: make(map[string]string)}, nil
 		}
 		return nil, fmt.Errorf("reading auth: %w", err)
 	}
 
-	var s Store
+	var s AuthStore
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, fmt.Errorf("parsing auth: %w", err)
 	}
@@ -36,7 +36,7 @@ func Load(path string) (*Store, error) {
 	return &s, nil
 }
 
-func Save(path string, s *Store) error {
+func SaveAuth(path string, s *AuthStore) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err

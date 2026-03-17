@@ -7,9 +7,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/lucasnevespereira/logmx/internal/api"
-	"github.com/lucasnevespereira/logmx/internal/auth"
 	"github.com/lucasnevespereira/logmx/internal/config"
+	"github.com/lucasnevespereira/logmx/internal/provider/railway"
+	"github.com/lucasnevespereira/logmx/internal/provider/vercel"
 )
 
 var supportedProviders = []string{"vercel", "railway"}
@@ -50,9 +50,9 @@ func sourceAddCmd() *cobra.Command {
 				cfgPath = config.DefaultPath()
 			}
 
-			provider := strings.ToLower(from)
+			prov := strings.ToLower(from)
 
-			if provider == "" {
+			if prov == "" {
 				options := make([]huh.Option[string], len(supportedProviders))
 				for i, p := range supportedProviders {
 					options[i] = huh.NewOption(p, p)
@@ -61,30 +61,30 @@ func sourceAddCmd() *cobra.Command {
 				err := huh.NewSelect[string]().
 					Title("Pick a provider").
 					Options(options...).
-					Value(&provider).
+					Value(&prov).
 					Run()
 				if err != nil {
 					return err
 				}
 			}
 
-			if !isSupportedProvider(provider) {
+			if !isSupportedProvider(prov) {
 				return fmt.Errorf("unknown provider %q — supported: %s",
-					provider, strings.Join(supportedProviders, ", "))
+					prov, strings.Join(supportedProviders, ", "))
 			}
 
-			store, err := auth.Load(auth.DefaultPath())
+			store, err := config.LoadAuth(config.DefaultAuthPath())
 			if err != nil {
 				return err
 			}
 
-			token := store.Tokens[provider]
+			token := store.Tokens[prov]
 			if token == "" {
-				return fmt.Errorf("no token for %s — run 'logmx auth %s' first", provider, provider)
+				return fmt.Errorf("no token for %s — run 'logmx auth %s' first", prov, prov)
 			}
 
-			fmt.Printf("Fetching projects from %s...\n", provider)
-			sources, err := fetchProjectOptions(provider, token)
+			fmt.Printf("Fetching projects from %s...\n", prov)
+			sources, err := fetchProjectOptions(prov, token)
 			if err != nil {
 				return fmt.Errorf("fetching projects: %w", err)
 			}
@@ -147,7 +147,7 @@ func sourceAddCmd() *cobra.Command {
 
 				cfg.Sources = append(cfg.Sources, config.Source{
 					Name:     s.Name,
-					Provider: provider,
+					Provider: prov,
 					Project:  s.Project,
 					Service:  s.Service,
 				})
@@ -270,10 +270,10 @@ func isSupportedProvider(p string) bool {
 	return false
 }
 
-func fetchProjectOptions(provider, token string) ([]sourceOption, error) {
-	switch provider {
+func fetchProjectOptions(prov, token string) ([]sourceOption, error) {
+	switch prov {
 	case "vercel":
-		c := api.NewVercelClient(token)
+		c := vercel.NewClient(token)
 		projects, err := c.ListProjects()
 		if err != nil {
 			return nil, err
@@ -285,7 +285,7 @@ func fetchProjectOptions(provider, token string) ([]sourceOption, error) {
 		return opts, nil
 
 	case "railway":
-		c := api.NewRailwayClient(token)
+		c := railway.NewClient(token)
 		projects, err := c.ListProjects()
 		if err != nil {
 			return nil, err
@@ -306,5 +306,5 @@ func fetchProjectOptions(provider, token string) ([]sourceOption, error) {
 		}
 		return opts, nil
 	}
-	return nil, fmt.Errorf("unknown provider %q", provider)
+	return nil, fmt.Errorf("unknown provider %q", prov)
 }

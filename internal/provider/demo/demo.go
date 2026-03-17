@@ -4,18 +4,18 @@ import (
 	"context"
 	"time"
 
-	"github.com/lucasnevespereira/logmx/internal/connectors"
-	"github.com/lucasnevespereira/logmx/internal/models"
+	"github.com/lucasnevespereira/logmx/internal/log"
+	"github.com/lucasnevespereira/logmx/internal/provider"
 )
 
 var messages = []struct {
-	level   models.LogLevel
+	level   log.LogLevel
 	message string
 }{
-	{models.LevelInfo, "request completed in 42ms"},
-	{models.LevelWarn, "memory usage at 80%"},
-	{models.LevelError, "failed to connect to database"},
-	{models.LevelDebug, "cache miss for key user:123"},
+	{log.LevelInfo, "request completed in 42ms"},
+	{log.LevelWarn, "memory usage at 80%"},
+	{log.LevelError, "failed to connect to database"},
+	{log.LevelDebug, "cache miss for key user:123"},
 }
 
 type DemoConnector struct {
@@ -27,10 +27,10 @@ func (d *DemoConnector) Name() string {
 	return d.Source
 }
 
-func (d *DemoConnector) Start(ctx context.Context, ch chan<- models.LogEntry) error {
+func (d *DemoConnector) Start(ctx context.Context, ch chan<- log.LogEntry) error {
 	for i := 0; d.Follow || i < len(messages); i++ {
 		msg := messages[i%len(messages)]
-		connectors.Send(ctx, ch, models.LogEntry{
+		provider.Send(ctx, ch, log.LogEntry{
 			Timestamp: time.Now().UTC(),
 			Source:    d.Source,
 			Level:     msg.level,

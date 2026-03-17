@@ -1,10 +1,29 @@
-package cli
+package provider
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
+
+	"github.com/lucasnevespereira/logmx/internal/log"
 )
 
+// Connector fetches or streams log entries from a single source.
+// Start blocks until the source is exhausted or the context is cancelled.
+type Connector interface {
+	Name() string
+	Start(ctx context.Context, ch chan<- log.LogEntry) error
+}
+
+// Send writes an entry to the channel or returns if the context is cancelled.
+func Send(ctx context.Context, ch chan<- log.LogEntry, e log.LogEntry) {
+	select {
+	case ch <- e:
+	case <-ctx.Done():
+	}
+}
+
+// Dependency describes an external CLI required by a provider.
 type Dependency struct {
 	Name       string
 	Binary     string
@@ -24,10 +43,10 @@ var ProviderDeps = map[string]Dependency{
 	},
 }
 
-func CheckDep(provider string) error {
-	dep, ok := ProviderDeps[provider]
+func CheckDep(prov string) error {
+	dep, ok := ProviderDeps[prov]
 	if !ok {
-		return nil // no CLI dep for this provider
+		return nil
 	}
 
 	_, err := exec.LookPath(dep.Binary)

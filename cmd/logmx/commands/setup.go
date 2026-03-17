@@ -10,9 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
-	"github.com/lucasnevespereira/logmx/internal/auth"
-	"github.com/lucasnevespereira/logmx/internal/cli"
 	"github.com/lucasnevespereira/logmx/internal/config"
+	"github.com/lucasnevespereira/logmx/internal/provider"
 )
 
 var (
@@ -72,33 +71,33 @@ func runSetup(cfgPath string) error {
 	fmt.Println(title.Render("  Authentication"))
 	fmt.Println()
 
-	store, err := auth.Load(auth.DefaultPath())
+	store, err := config.LoadAuth(config.DefaultAuthPath())
 	if err != nil {
 		return err
 	}
 
 	var authenticated []string
-	for _, provider := range chosen {
-		if token := store.Tokens[provider]; token != "" {
-			name, err := validateToken(provider, token)
+	for _, prov := range chosen {
+		if token := store.Tokens[prov]; token != "" {
+			name, err := validateToken(prov, token)
 			if err == nil {
-				fmt.Printf("  %s %s %s\n", success.Render("✓"), provider, dim.Render(fmt.Sprintf("(%s)", name)))
-				authenticated = append(authenticated, provider)
+				fmt.Printf("  %s %s %s\n", success.Render("✓"), prov, dim.Render(fmt.Sprintf("(%s)", name)))
+				authenticated = append(authenticated, prov)
 				continue
 			}
-			fmt.Printf("  %s %s %s\n", warning.Render("✗"), provider, dim.Render("(token expired)"))
+			fmt.Printf("  %s %s %s\n", warning.Render("✗"), prov, dim.Render("(token expired)"))
 		} else {
-			fmt.Printf("  %s %s %s\n", warning.Render("✗"), provider, dim.Render("(no token)"))
+			fmt.Printf("  %s %s %s\n", warning.Render("✗"), prov, dim.Render("(no token)"))
 		}
 
-		if err := runAuth(provider); err != nil {
+		if err := runAuth(prov); err != nil {
 			fmt.Printf("  %s\n", errStyle.Render(fmt.Sprintf("Skipped: %v", err)))
 			continue
 		}
 
 		// Reload store after auth saved the token
-		store, _ = auth.Load(auth.DefaultPath())
-		authenticated = append(authenticated, provider)
+		store, _ = config.LoadAuth(config.DefaultAuthPath())
+		authenticated = append(authenticated, prov)
 	}
 
 	if len(authenticated) == 0 {
@@ -119,12 +118,12 @@ func runSetup(cfgPath string) error {
 	fmt.Println()
 
 	var allSources []config.Source
-	for _, provider := range authenticated {
-		token := store.Tokens[provider]
-		dep := cli.ProviderDeps[provider]
+	for _, prov := range authenticated {
+		token := store.Tokens[prov]
+		dep := provider.ProviderDeps[prov]
 
 		fmt.Printf("  Fetching projects from %s...\n", dep.Name)
-		opts, err := fetchProjectOptions(provider, token)
+		opts, err := fetchProjectOptions(prov, token)
 		if err != nil {
 			fmt.Printf("  %s\n", errStyle.Render(fmt.Sprintf("Failed: %v", err)))
 			continue
@@ -162,7 +161,7 @@ func runSetup(cfgPath string) error {
 			o := opts[idx]
 			allSources = append(allSources, config.Source{
 				Name:     o.Name,
-				Provider: provider,
+				Provider: prov,
 				Project:  o.Project,
 				Service:  o.Service,
 			})
@@ -210,8 +209,8 @@ func runSetup(cfgPath string) error {
 }
 
 func installCLIs(providers []string) {
-	for _, provider := range providers {
-		dep := cli.ProviderDeps[provider]
+	for _, prov := range providers {
+		dep := provider.ProviderDeps[prov]
 
 		if _, err := exec.LookPath(dep.Binary); err == nil {
 			fmt.Printf("  %s %s\n", success.Render("✓"), dep.Name)

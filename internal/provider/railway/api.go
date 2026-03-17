@@ -1,4 +1,4 @@
-package api
+package railway
 
 import (
 	"bytes"
@@ -10,24 +10,24 @@ import (
 
 const railwayGraphQL = "https://backboard.railway.com/graphql/v2"
 
-type RailwayClient struct {
+type Client struct {
 	token      string
 	httpClient *http.Client
 }
 
-func NewRailwayClient(token string) *RailwayClient {
-	return &RailwayClient{token: token, httpClient: &http.Client{}}
+func NewClient(token string) *Client {
+	return &Client{token: token, httpClient: &http.Client{}}
 }
 
-type RailwayUser struct {
+type User struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 }
 
-func (c *RailwayClient) ValidateToken() (*RailwayUser, error) {
+func (c *Client) ValidateToken() (*User, error) {
 	var resp struct {
 		Data struct {
-			Me RailwayUser `json:"me"`
+			Me User `json:"me"`
 		} `json:"data"`
 	}
 	if err := c.query(`{ me { name email } }`, &resp); err != nil {
@@ -39,18 +39,18 @@ func (c *RailwayClient) ValidateToken() (*RailwayUser, error) {
 	return &resp.Data.Me, nil
 }
 
-type RailwayProject struct {
+type Project struct {
 	ID       string
 	Name     string
-	Services []RailwayService
+	Services []Service
 }
 
-type RailwayService struct {
+type Service struct {
 	ID   string
 	Name string
 }
 
-func (c *RailwayClient) ListProjects() ([]RailwayProject, error) {
+func (c *Client) ListProjects() ([]Project, error) {
 	var resp struct {
 		Data struct {
 			Me struct {
@@ -79,11 +79,11 @@ func (c *RailwayClient) ListProjects() ([]RailwayProject, error) {
 		return nil, err
 	}
 
-	var projects []RailwayProject
+	var projects []Project
 	for _, e := range resp.Data.Me.Projects.Edges {
-		p := RailwayProject{ID: e.Node.ID, Name: e.Node.Name}
+		p := Project{ID: e.Node.ID, Name: e.Node.Name}
 		for _, se := range e.Node.Services.Edges {
-			p.Services = append(p.Services, RailwayService{
+			p.Services = append(p.Services, Service{
 				ID:   se.Node.ID,
 				Name: se.Node.Name,
 			})
@@ -93,7 +93,7 @@ func (c *RailwayClient) ListProjects() ([]RailwayProject, error) {
 	return projects, nil
 }
 
-func (c *RailwayClient) query(q string, out any) error {
+func (c *Client) query(q string, out any) error {
 	body, _ := json.Marshal(map[string]string{"query": q})
 
 	req, err := http.NewRequest("POST", railwayGraphQL, bytes.NewReader(body))
