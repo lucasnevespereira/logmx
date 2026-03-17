@@ -54,28 +54,3 @@ func Save(path string, cfg *Config) error {
 	}
 	return os.WriteFile(path, data, 0o644)
 }
-
-func Init(path string) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-
-	example := `# logmx configuration
-# Add your log sources here.
-#
-# sources:
-#   - name: api
-#     provider: vercel
-#     project: prj_abc123
-#   - name: frontend
-#     provider: vercel
-#     project: prj_def456
-#   - name: worker
-#     provider: railway
-#     service: srv_xxx
-
-sources: []
-`
-	return os.WriteFile(path, []byte(example), 0o644)
-}
