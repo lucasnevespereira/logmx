@@ -69,7 +69,7 @@ func tailCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&sources, "source", "", "Comma-separated source names (default: all)")
+	cmd.Flags().StringVarP(&sources, "source", "s", "", "Comma-separated source names (default: all)")
 	cmd.Flags().StringVar(&level, "level", "", "Filter by log level (info, warn, error, debug)")
 	cmd.Flags().StringVar(&cfgPath, "config", "", "Path to config file")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 100, "Number of recent logs per source")
@@ -91,11 +91,6 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool
 		return nil, err
 	}
 
-	store, err := config.LoadAuth(config.DefaultAuthPath())
-	if err != nil {
-		return nil, fmt.Errorf("loading auth: %w", err)
-	}
-
 	allowed := make(map[string]bool)
 	if sourceFilter != "" {
 		for _, s := range strings.Split(sourceFilter, ",") {
@@ -103,16 +98,21 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool
 		}
 	}
 
-	var providers []string
+	// Load token store for providers that need it (e.g. Vercel).
+	store, err := config.LoadAuth(config.DefaultAuthPath())
+	if err != nil {
+		return nil, fmt.Errorf("loading auth: %w", err)
+	}
+
+	var providerNames []string
 	var conns []provider.Connector
 	for _, src := range cfg.Sources {
 		if len(allowed) > 0 && !allowed[src.Name] {
 			continue
 		}
-		providers = append(providers, src.Provider)
+		providerNames = append(providerNames, src.Provider)
 
-		token := store.Tokens[src.Provider]
-		c, err := connectorForSource(src, token, limit, follow)
+		c, err := connectorForSource(src, store.Tokens[src.Provider], limit, follow)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping source %q: %v\n", src.Name, err)
 			continue
@@ -120,7 +120,7 @@ func buildConnectors(cfgPath string, sourceFilter string, limit int, follow bool
 		conns = append(conns, c)
 	}
 
-	if missing := provider.MissingDeps(providers); len(missing) > 0 {
+	if missing := provider.MissingDeps(providerNames); len(missing) > 0 {
 		for _, dep := range missing {
 			fmt.Fprintf(os.Stderr, "missing: %s — install with: %s\n", dep.Name, dep.InstallCmd)
 		}
@@ -146,12 +146,12 @@ func connectorForSource(src config.Source, token string, limit int, follow bool)
 
 	case "railway":
 		return &provRailway.Connector{
-			Source:    src.Name,
-			ProjectID: src.Project,
-			ServiceID: src.Service,
-			Token:     token,
-			Limit:     limit,
-			Follow:    follow,
+			Source:        src.Name,
+			ProjectID:     src.Project,
+			ServiceID:     src.Service,
+			EnvironmentID: src.Environment,
+			Limit:         limit,
+			Follow:        follow,
 		}, nil
 
 	default:

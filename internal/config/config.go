@@ -14,10 +14,11 @@ func IsNotExist(err error) bool {
 }
 
 type Source struct {
-	Name     string `yaml:"name"`
-	Provider string `yaml:"provider"`
-	Project  string `yaml:"project,omitempty"`
-	Service  string `yaml:"service,omitempty"`
+	Name        string `yaml:"name"`
+	Provider    string `yaml:"provider"`
+	Project     string `yaml:"project,omitempty"`
+	Service     string `yaml:"service,omitempty"`
+	Environment string `yaml:"environment,omitempty"`
 }
 
 type Config struct {
