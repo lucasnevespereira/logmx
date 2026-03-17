@@ -88,14 +88,7 @@ func validateToken(prov, token string) (string, error) {
 		return u.Username, nil
 	case "railway":
 		c := railway.NewClient(token)
-		u, err := c.ValidateToken()
-		if err != nil {
-			return "", err
-		}
-		if u.Name != "" {
-			return u.Name, nil
-		}
-		return u.Email, nil
+		return c.ValidateToken()
 	default:
 		return "", fmt.Errorf("unknown provider")
 	}
