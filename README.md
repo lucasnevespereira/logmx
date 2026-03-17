@@ -1,8 +1,8 @@
 # logmx
 
-> Aggregate and stream logs from multiple cloud platforms into a single terminal view.
+> Aggregate and stream logs from multiple platforms into a single terminal view.
 
-Stop switching between Vercel, Railway, GCP, and Render dashboards. `logmx` streams all your logs into one place.
+Stop switching between Vercel, Railway dashboards. `logmx` streams all your logs into one place.
 
 ```
 21:04:12 vercel   INFO  request completed in 42ms
@@ -70,12 +70,10 @@ logmx source remove my-docs        # Remove a source
 
 ## Supported Providers
 
-| Provider | Auth      | Streaming via          |
-| -------- | --------- | ---------------------- |
-| Vercel   | API token | `vercel` CLI (npm)     |
-| Railway  | API token | `@railway/cli` (npm)   |
-| GCP      | Planned   | —                      |
-| Render   | Planned   | —                      |
+| Provider | Auth      | Streaming via        |
+| -------- | --------- | -------------------- |
+| Vercel   | API token | `vercel` CLI (npm)   |
+| Railway  | API token | `@railway/cli` (npm) |
 
 ## Documentation
 

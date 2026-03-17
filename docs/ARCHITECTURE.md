@@ -2,7 +2,7 @@
 
 ## Overview
 
-logmx is built around **providers** — one per cloud platform — that each stream logs into a shared aggregator, which merges them and outputs to the terminal.
+logmx is built around **providers** — one per platform — that each stream logs into a shared aggregator, which merges them and outputs to the terminal.
 
 ```
 +-------------------+
