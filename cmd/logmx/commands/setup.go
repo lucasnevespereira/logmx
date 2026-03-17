@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -232,8 +231,7 @@ func installCLIs(providers []string) {
 		}
 
 		fmt.Printf("  Installing %s...\n", dep.Name)
-		parts := strings.Fields(dep.InstallCmd)
-		cmd := exec.Command(parts[0], parts[1:]...)
+		cmd := exec.Command("bash", "-c", dep.InstallCmd)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
