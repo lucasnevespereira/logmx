@@ -73,13 +73,42 @@ func (c *Connector) Start(ctx context.Context, ch chan<- log.LogEntry) error {
 	if c.ServiceID != "" {
 		args = append(args, "-s", c.ServiceID)
 	}
-	// Railway CLI streams by default; --lines disables streaming and fetches history.
+
 	if !c.Follow {
+		// Non-follow: fetch history and exit.
 		args = append(args, "-n", fmt.Sprintf("%d", c.Limit))
+		return c.runLogs(ctx, ch, tmpDir, args)
 	}
 
+	// Follow mode: Railway CLI may exit when a deployment is idle.
+	// Retry with --since to only fetch new logs on reconnect.
+	args = append(args, "--latest")
+	first := true
+	for {
+		runArgs := args
+		if !first {
+			// On reconnect, only fetch logs from the last 30 seconds
+			// to avoid duplicating the full history on each retry.
+			runArgs = append(append([]string{}, args...), "--since", "30s")
+		}
+		first = false
+
+		_ = c.runLogs(ctx, ch, tmpDir, runArgs)
+
+		// If context is cancelled, stop retrying.
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(5 * time.Second):
+			// Reconnect after a short delay.
+		}
+	}
+}
+
+// runLogs executes a single `railway logs` invocation and streams entries to ch.
+func (c *Connector) runLogs(ctx context.Context, ch chan<- log.LogEntry, dir string, args []string) error {
 	cmd := exec.CommandContext(ctx, "railway", args...)
-	cmd.Dir = tmpDir
+	cmd.Dir = dir
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
