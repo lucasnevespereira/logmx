@@ -27,7 +27,7 @@ go install github.com/lucasnevespereira/logmx/cmd/logmx@latest
 ## Quick Start
 
 ```sh
-logmx setup    # pick providers, paste tokens, select projects
+logmx setup    # pick providers, authenticate, select projects
 logmx tail -f  # stream logs in real time
 ```
 
@@ -41,12 +41,13 @@ logmx setup                        # Interactive setup wizard
 logmx tail                         # Show recent logs and exit
 logmx tail -f                      # Stream logs in real time
 logmx tail -n 50                   # Show last 50 logs per source
-logmx tail --source my-api         # Filter by source
+logmx tail -s my-api               # Filter by source
 logmx tail --level error           # Filter by log level
-logmx tail -f --source my-api      # Stream a specific source
+logmx tail -f -s my-api            # Stream a specific source
 
 # Manage providers & sources
 logmx auth vercel                  # Add or refresh a provider token
+logmx auth railway                 # Log in to Railway CLI
 logmx source add                   # Add sources (pick provider)
 logmx source add --from vercel     # Add sources from a specific provider
 logmx source list                  # List configured sources
@@ -57,12 +58,12 @@ logmx source remove my-docs        # Remove a source
 
 ## Supported Providers
 
-| Provider | Auth      | Streaming via        |
-| -------- | --------- | -------------------- |
-| Vercel   | API token | `vercel` CLI (npm)   |
-| Railway  | API token | `@railway/cli` (npm) |
-| Fly.io   | Planned   | —                    |
-| Render   | Planned   | —                    |
+| Provider | Auth            | Streaming via    |
+| -------- | --------------- | ---------------- |
+| Vercel   | API token       | `vercel` CLI     |
+| Railway  | `railway login` | `railway` CLI    |
+| Fly.io   | Planned         | —                |
+| Render   | Planned         | —                |
 
 ## Documentation
 

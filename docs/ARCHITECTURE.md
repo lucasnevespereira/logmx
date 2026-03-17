@@ -41,7 +41,7 @@ Starts providers concurrently via goroutines, merges their output into a single 
 
 Each provider implements the `Connector` interface. A provider directory contains:
 
-- `api.go` — HTTP client for the provider's API (list projects, validate tokens)
+- `api.go` — client for the provider (HTTP API for Vercel, CLI wrapper for Railway)
 - `logs.go` — log fetching and streaming via the provider's CLI
 
 Supported: Vercel, Railway. Planned: Fly.io, Render.
@@ -67,13 +67,15 @@ Sources are defined in `~/.config/logmx/config.yaml`:
 sources:
   - name: api
     provider: vercel
-    project: prj_abc123
+    project: my-app
   - name: worker
     provider: railway
-    service: srv_xxx
+    project: 3d506c76-...
+    service: 9f73aec2-...
+    environment: f157c6e5-...
 ```
 
-Auth tokens are stored in `~/.config/logmx/auth.json`.
+Auth tokens (Vercel) are stored in `~/.config/logmx/auth.json`. Railway authentication is managed by the Railway CLI itself (`~/.railway/config.json`).
 
 ## Project Structure
 
@@ -94,7 +96,7 @@ logmx/
     │   │   ├── api.go                  ← Vercel REST API client
     │   │   └── logs.go                 ← log fetching/streaming via CLI
     │   ├── railway/
-    │   │   ├── api.go                  ← Railway GraphQL API client
+    │   │   ├── api.go                  ← Railway CLI wrapper (auth, project discovery)
     │   │   └── logs.go                 ← log fetching/streaming via CLI
     │   └── demo/
     │       └── demo.go                 ← demo connector (mock data)
