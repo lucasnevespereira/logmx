@@ -66,8 +66,8 @@ logmx source remove my-docs        # Remove a source
 
 ## Documentation
 
-[Architecture](docs/ARCHITECTURE.md) — how it works internally
-[Roadmap](docs/ROADMAP.md) — what's planned
+- [Architecture](docs/ARCHITECTURE.md) — how it works internally
+- [Roadmap](docs/ROADMAP.md) — what's planned
 
 ## Contributing
 
