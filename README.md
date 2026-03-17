@@ -14,6 +14,12 @@ Stop switching between Vercel, Railway, GCP, and Render dashboards. `logmx` stre
 ## Install
 
 ```sh
+brew install lucasnevespereira/tools/logmx
+```
+
+Or with Go:
+
+```sh
 go install github.com/lucasnevespereira/logmx/cmd/logmx@latest
 ```
 

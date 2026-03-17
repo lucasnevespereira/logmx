@@ -4,10 +4,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func Root() *cobra.Command {
+func Root(version string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "logmx",
 		Short:         "Aggregate and stream logs from multiple cloud platforms",
+		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
