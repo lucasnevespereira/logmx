@@ -96,7 +96,10 @@ func runSetup(cfgPath string) error {
 		}
 
 		// Reload store after auth saved the token
-		store, _ = config.LoadAuth(config.DefaultAuthPath())
+		store, err = config.LoadAuth(config.DefaultAuthPath())
+		if err != nil {
+			return err
+		}
 		authenticated = append(authenticated, prov)
 	}
 
