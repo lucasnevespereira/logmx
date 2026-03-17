@@ -71,7 +71,7 @@ logmx source remove my-docs        # Remove a source
 
 ## Contributing
 
-Contributions welcome. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for an overview of the codebase before opening a PR.
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
 ## License
 
