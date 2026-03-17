@@ -20,7 +20,7 @@ logmx is built around **providers** — one per platform — that each stream lo
 | Providers         |
 | vercel            |
 | railway           |
-| gcp               |
+| fly.io            |
 | render            |
 +-------------------+
 ```
@@ -44,7 +44,7 @@ Each provider implements the `Connector` interface. A provider directory contain
 - `api.go` — HTTP client for the provider's API (list projects, validate tokens)
 - `logs.go` — log fetching and streaming via the provider's CLI
 
-Supported: Vercel, Railway. Planned: GCP, Render, Docker, Kubernetes.
+Supported: Vercel, Railway. Planned: Fly.io, Render.
 
 ## Log Model
 

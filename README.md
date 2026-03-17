@@ -61,11 +61,13 @@ logmx source remove my-docs        # Remove a source
 | -------- | --------- | -------------------- |
 | Vercel   | API token | `vercel` CLI (npm)   |
 | Railway  | API token | `@railway/cli` (npm) |
+| Fly.io   | Planned   | —                    |
+| Render   | Planned   | —                    |
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — how it works internally
-- [Roadmap](docs/ROADMAP.md) — what's planned
+[Architecture](docs/ARCHITECTURE.md) — how it works internally
+[Roadmap](docs/ROADMAP.md) — what's planned
 
 ## Contributing
 

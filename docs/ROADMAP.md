@@ -17,24 +17,24 @@
 - [x] CLI dependency check + auto-install in setup wizard
 - [x] Log ordering by timestamp across sources
 - [x] Demo mode (no config needed)
+
+## v0.0.2 — Streaming & CI
+
 - [x] `logmx tail -f` for real-time log streaming
+- [x] Architecture refactor — provider-centric package structure
+- [x] CI pipeline (build + lint on push/PR)
+- [x] Automated releases via GitHub Actions
+- [x] Homebrew tap distribution
 
-## v0.0.2 — Local Log Storage & Search
+## v0.0.3 — More Providers
 
-- [ ] Local log storage — `tail` saves fetched logs to local SQLite
-- [ ] `logmx search "timeout"` — full-text search across all stored logs
-- [ ] `logmx search --since 7d --level error` — filter stored logs by time & level
-- [ ] `logmx tail --grep "timeout"` — filter by keyword
-
-## v0.0.3 — More Providers & Distribution
-
-- [ ] GCP Cloud Logging connector
+- [ ] Fly.io connector
 - [ ] Render connector
-- [ ] Docker / Kubernetes connector
-- [ ] goreleaser + Homebrew tap
 
 ## Future Ideas
+
 - **Interactive TUI** — press `/` to search, `f` to filter, live dashboard
+- **Local storage & search** — save logs to SQLite, query with `logmx search`
 - **Metrics view** — errors per service, warnings per minute
 - **Alerts** — `logmx watch --level error --notify slack`
 - **Log export** — `logmx export --format json --since 24h`
