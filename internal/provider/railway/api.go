@@ -102,7 +102,10 @@ type gqlResponse struct {
 }
 
 func (c *Client) query(q string, out any) error {
-	body, _ := json.Marshal(map[string]string{"query": q})
+	body, err := json.Marshal(map[string]string{"query": q})
+	if err != nil {
+		return fmt.Errorf("marshaling query: %w", err)
+	}
 
 	req, err := http.NewRequest("POST", railwayGraphQL, bytes.NewReader(body))
 	if err != nil {
