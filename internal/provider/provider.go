@@ -39,7 +39,7 @@ var ProviderDeps = map[string]Dependency{
 	"railway": {
 		Name:       "Railway CLI",
 		Binary:     "railway",
-		InstallCmd: "npm i -g @railway/cli",
+		InstallCmd: "bash -c 'curl -fsSL cli.new | bash'",
 	},
 }
 
